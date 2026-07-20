@@ -1,2 +1,3 @@
 check_id,check_name,value,notes,status,updated_at
-1,Number of rows in data frame,2633836,Depends on number of students and number of course records you'd expect,Done,2026-07-20T16:56:55Z
+1,Number of rows in data frame,2633836,Depends on number of students and number of course records you'd expect,Done,2026-07-20T17:53:06Z
+2,Number of students,48128,Should match what you'd expect from public data,Done,2026-07-20T17:53:50Z

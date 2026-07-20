@@ -140,7 +140,7 @@ Take green comments and move directly above code chunk
 
 ```{r}
 # Create folder path
-raw_data_folder_path <- "District Partners/Detroit Public Schools/24-25 - HS Redesign Follow-on 2/1. Data & Analysis - Secure/1.0 Raw Data/25-11-03 Data Transmittal"
+raw_data_folder_path <- "District Partners/Detroit Public Schools/24-25 - HS Redesign Follow-on 2/1. Data & Analysis - Secure"
 ```
 
 ## 1.3 Load Data
@@ -158,7 +158,12 @@ need.
 cs_raw_file <- ers_read_sharepoint(
   folder_path = raw_data_folder_path,
   file_name_with_extension =
-    "Course Sections - Corrected.csv")
+    "/course_sections_250214.csv")
+
+cs_validated_file <- ers_read_sharepoint(
+  folder_path = raw_data_folder_path,
+  file_name_with_extension =
+    "/1.1 Validated Data/course_sections_24_25_with_CTC.csv")
 
 # Load student demographic data
 #stu_demographics <- ers_read_sharepoint(
@@ -300,7 +305,7 @@ get_checks_table()
 update_check(
   check_id = 2,
   check_name = "Number of students", 
-  value = n_distinct(cs_raw_file$Stu_ID),
+  value = n_distinct(cs_raw_file$MaskedStudentID),
   notes = "Should match what you'd expect from public data",
   status = "Done"
   )
@@ -343,7 +348,7 @@ names(cs_raw_file)
   exmaple:
 
   - If you received active course enrollments from snapshot in time vs.
-    all historical course enrollments from that year)
+    all historical course enrollments from that year
 
   - If you received Period and Rotation as an "Expression" - e.g.,
     "2-8(A)", "7(B)", "1-4(A), 6-8(B)", etc. This is how it's typically
@@ -361,56 +366,72 @@ names(cs_raw_file)
 # If the ERS Standard column is not present in your data then type "MISSING"
 
 # CRITICAL for ALL course schedule data
-cs_raw_file <- cs_raw_file %>% 
+cs_raw_file <- cs_raw_file |>
+  select(
+    -`Grade Scale ID`,
+    -`Grade Scale Name`
+  ) |>
   mutate(
-  D_course_id = Crs_ID,
-  D_course_name = Crs_Name,
-  D_course_subject = "MISSING",
-  D_location_id = Sch_ID,
-  D_location_name = Sch_Name,
-  D_employee_id = Teacher_ID,
-  D_term = Term,
-  D_expression = Rotation, # added for Springfield
-  D_rotation = CYCLE_DAY_LETTER,
-  D_period = PERIOD_NUMBER,
-  D_meeting = MEETING, # added for Springfield
-  D_course_section = Section,
-  D_course_section_id = SECTIONID, # added for Springfield
-  D_stu_grade = "MISSING",
-  D_stu_id = Stu_ID,
+    # Core fields
+    D_stu_id = MaskedStudentID,
+    D_employee_id = MaskedTeacherID,
+    D_year_id = Year_End,
+    D_ccid = CCID,
 
-# Critical if you have all course enrollments (i.e., NOT a snapshot in time)
-# If you have a full-year snapshot, hash these fields out
-#  D_stu_enter_date = "MISSING",
-#  D_stu_exit_date = "MISSING",
-#  D_course_start_date = "MISSING",
-#  D_course_end_date = "MISSING",
+    D_course_id = `Course Number`,
+    D_course_name = `Course Name`,
+    D_course_subject = "MISSING",
 
-# Important
-#  D_course_credit_recovery = "MISSING",
-#  D_course_ell_flag = "MISSING",
-#  D_course_swd_flag = "MISSING",
-#  D_course_rigor = "MISSING",
-#  D_course_format = "MISSING",
-#  D_home_school = "MISSING",
-  D_stu_swd_flag = "MISSING",
-  D_stu_ell_flag = "MISSING",
-  D_stu_poverty_flag = "MISSING",
-  D_stu_race = "MISSING",
-  
-# Nice to have/if applicable
-#  D_course_pathway = "MISSING",
-#  D_cte_flag = "MISSING",
-#  D_class_size_max = "MISSING",
-#  D_credits_earned = "MISSING",
-#  D_credits_possible = "MISSING",
-#  D_stu_race = "MISSING",
-#  D_period_start_time = "MISSING",
-#  D_period_end_time = "MISSING",
-  D_room = Room_Nu,
-  D_year_id = YEAR_ID,
-  .keep = "unused"
-)
+    D_term = "MISSING",
+    D_expression = `Period Expression`,
+    D_period = str_trim(str_remove(`Period Expression`, "\\([^)]*\\)$")),
+    D_rotation = str_extract(`Period Expression`, "(?<=\\()[^)]+(?=\\)$)"),
+    # D_location_id = SCHOOL_ID,
+    D_location_name = `School`,
+
+    D_course_section = "MISSING",
+    D_course_section_id = "MISSING",
+    D_stu_grade = "MISSING",
+
+    # Enrollment dates
+    D_stu_enter_date = `Date Enrolled`,
+    D_stu_exit_date = `Date Left`,
+    D_course_start_date = "MISSING",
+    D_course_end_date = "MISSING",
+
+    # Additional source fields
+    C_sced_code = `SCED Code`,
+    C_ap_flag = `AP Flag`,
+    C_accelerated_course_flag = `Accelerated Course Flag`,
+    C_virtual_flag = `Virtual Flag`,
+    C_virtual_delivery_type = `Virtual Delivery Type`,
+    C_eem_code = EEM_CODE,
+
+    # Important fields not provided
+    D_course_credit_recovery = "MISSING",
+    D_course_ell_flag = "MISSING",
+    D_course_swd_flag = "MISSING",
+    D_course_rigor = "MISSING",
+    D_course_format = "MISSING",
+    D_home_school = "MISSING",
+
+    D_stu_swd_flag = "MISSING",
+    D_stu_ell_flag = "MISSING",
+    D_stu_poverty_flag = "MISSING",
+    D_stu_race = "MISSING",
+
+    # Nice-to-have fields not provided
+    D_course_pathway = "MISSING",
+    D_cte_flag = "MISSING",
+    D_class_size_max = "MISSING",
+    D_credits_earned = "MISSING",
+    D_credits_possible = "MISSING",
+    D_period_start_time = "MISSING",
+    D_period_end_time = "MISSING",
+    D_room = "MISSING",
+
+    .keep = "unused"
+  )
 ```
 
 ### c. Review Missing Columns
@@ -1291,7 +1312,7 @@ ers_write_sharepoint(
   data = cs_raw_file,
   folder_path = raw_data_folder_path,
   file_name_with_extension = 
-    "/Processed Data/01_course_data_post_validation.csv")
+    "/1.2 Data Imports & Exports from R/26-27 Course Schedule/01_course_data_post_validation.csv")
 
 ```
 
