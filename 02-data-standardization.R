@@ -162,20 +162,20 @@ View(cs_validated_file %>%
 
 # %% 2.1 Re-code Student Grade [2]
 # Recode student grade values
-cs_validated_file <- cs_validated_file %>%
-  mutate(C_stu_grade_ers = case_when(
-    D_stu_grade %in% c("Pre K", "Pre-Kindergarten") ~ "PreK",
-    D_stu_grade %in% c("Kindergarten", "K") ~ "KG",
-    D_stu_grade %in% paste0("0", 1:9) ~ D_stu_grade,
-    D_stu_grade %in% paste0(1:9) ~ paste0("0", D_stu_grade),
-    is.na(D_stu_grade) ~ "Uncoded",
-    TRUE ~ D_stu_grade
-  ))
+#cs_validated_file <- cs_validated_file %>%
+#  mutate(C_stu_grade_ers = case_when(
+#    D_stu_grade %in% c("Pre K", "Pre-Kindergarten") ~ "PreK",
+#    D_stu_grade %in% c("Kindergarten", "K") ~ "KG",
+#    D_stu_grade %in% paste0("0", 1:9) ~ D_stu_grade,
+#    D_stu_grade %in% paste0(1:9) ~ paste0("0", D_stu_grade),
+#    is.na(D_stu_grade) ~ "Uncoded",
+#    TRUE ~ D_stu_grade
+#  ))
 
 # View the list of grades again to ensure there is an update
-View(cs_validated_file %>%
-  distinct(D_stu_grade,C_stu_grade_ers) %>%
-  arrange(D_stu_grade))
+#View(cs_validated_file %>%
+#  distinct(D_stu_grade,C_stu_grade_ers) %>%
+#  arrange(D_stu_grade))
 
 
 # 2.2 Create School Exclude Flag ----
@@ -413,15 +413,6 @@ cs_validated_file %>%
 
 # %%
 
-# update term value based on course name
-cs_validated_file <- cs_validated_file |>
-  mutate(D_term = case_when(
-    str_detect(D_course_name, "-\\s*A\\s*$") ~ "S1",
-    str_detect(D_course_name, "-\\s*B\\s*$") ~ "S2",
-    TRUE ~ "FY"
-    )
-  )
-
 # creating snapshot variable
 cs_validated_file <- cs_validated_file %>%
    mutate(C_stu_snapshot = case_when(
@@ -518,4 +509,4 @@ ers_write_sharepoint(
   data = cs_validated_file,
   folder_path = raw_data_folder_path,
   file_name_with_extension =
-    "/Processed Data/02_course_data_post_standardization.csv")
+    "/2. Processed Data/02_course_data_post_standardization.csv")

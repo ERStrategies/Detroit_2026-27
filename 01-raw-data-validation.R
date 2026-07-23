@@ -163,7 +163,7 @@ raw_data_folder_path <- "District Partners/Detroit Public Schools/26-27 HS Redes
 cs_raw_file <- ers_read_sharepoint(
   folder_path = raw_data_folder_path,
   file_name_with_extension =
-    "/0. Raw Data/course_sections_250214.csv")
+    "/0. Raw Data/course_sections_251103.csv")
 
 expression_coded <- ers_read_sharepoint(
   folder_path = raw_data_folder_path,
@@ -303,6 +303,8 @@ checks_table <- get_checks_table()
 
 get_checks_table()
 
+# Print list of column names
+names(cs_raw_file)
 
 
 # b. Number of total students ----
@@ -317,12 +319,12 @@ get_checks_table()
 # - **Project Team Action:** maybe change (see guidance in code block)
 
 # %% b. Number of total students
-# Count number of unique students
+# Filter to just the most recent year
 cs_raw_file <- cs_raw_file |>
+  filter(Year_End == 2026) |>
   mutate(
-    D_stu_id = `DPSCD Masked Student Id`,
+    D_stu_id = MaskedStudentID,
     .keep = "unused")
-
 
 update_check(
   check_id = 2,
@@ -336,7 +338,6 @@ checks_table <- get_checks_table()
 
 get_checks_table()
 
-
 # 2.3 Column Mapping ----
 
 # a. Review current columns ----
@@ -347,14 +348,6 @@ get_checks_table()
 # - **Check:** A new tab is created with a table view of your data
 
 # - **Project Team Action:** do not change (run as is)
-
-# %% a. Review current columns
-# View raw data
-View(cs_raw_file)
-
-# Print list of column names
-names(cs_raw_file)
-
 
 # b. Map project columns to ERS Standard Names ----
 
@@ -391,26 +384,31 @@ names(cs_raw_file)
 cs_raw_file <- cs_raw_file |>
   select(
     -`Grade Scale ID`,
-    -`Grade Scale Name`
+    -`Grade Scale Name`,
+    -`AP Flag`,
+    -`Accelerated Course Flag`,
+    -`Virtual Flag`,
+    -`Virtual Delivery Type`
   ) |>
   mutate(
     # Core fields
     # D_stu_id = `DPSCD Masked Student Id`,
-    D_employee_id = `DPSCD Masked Teacher Id`,
-    D_year_id = `Year End`,
+    D_employee_id = MaskedTeacherID,
+    D_year_id = Year_End,
     D_ccid = CCID,
-    D_users_dcid = USERS_DCID,
+    #D_users_dcid = USERS_DCID,
 
     D_course_id = `Course Number`,
     D_course_name = `Course Name`,
-    D_course_subject = "MISSING",
+    #D_course_subject = "MISSING",
+    D_sced_subject_code = `SCED Code`,
 
     D_term = "MISSING",
     D_expression = `Period Expression`,
     D_period = "MISSING",
     D_rotation = "MISSING",
-    # D_location_id = SCHOOL_ID,
-    D_location_name = `School`,
+    D_location_id = EEM_CODE,
+    D_location_name = "MISSING",
 
     D_course_section = "MISSING",
     #D_course_section_id = "MISSING",
@@ -422,26 +420,18 @@ cs_raw_file <- cs_raw_file |>
     #D_course_start_date = "MISSING",
     #D_course_end_date = "MISSING",
 
-    # Additional source fields
-    C_sced_code = `SCED Code`,
-    C_ap_flag = `AP Flag`,
-    C_accelerated_course_flag = `Accelerated Course Flag`,
-    C_virtual_flag = `Virtual Flag`,
-    C_virtual_delivery_type = `Virtual Delivery Type`,
-    C_eem_code = `EEM Code`,
-
     # Important fields not provided
-    D_course_credit_recovery = "MISSING",
-    D_course_ell_flag = "MISSING",
-    D_course_swd_flag = "MISSING",
-    D_course_rigor = "MISSING",
-    D_course_format = "MISSING",
+    #D_course_credit_recovery = "MISSING",
+    #D_course_ell_flag = "MISSING",
+    #D_course_swd_flag = "MISSING",
+    #D_course_rigor = "MISSING",
+    #D_course_format = "MISSING",
     #D_home_school = "MISSING",
 
-    D_stu_swd_flag = "MISSING",
-    D_stu_ell_flag = "MISSING",
-    D_stu_poverty_flag = "MISSING",
-    D_stu_race = "MISSING",
+    #D_stu_swd_flag = "MISSING",
+    #D_stu_ell_flag = "MISSING",
+    #D_stu_poverty_flag = "MISSING",
+    #D_stu_race = "MISSING",
 
     # Nice-to-have fields not provided
     #D_course_pathway = "MISSING",
@@ -583,13 +573,52 @@ cs_raw_file <- cs_raw_file |>
     location_coded,
     by = c(
       "D_location_name",
-      "C_eem_code"
+      "D_location_id"
   )
 )
 
 # Filter out data from non-neighborhood schools
 cs_raw_file <- cs_raw_file |>
   filter(!is.na(C_location_type))
+
+# %%
+# Update D_term based on course name
+cs_raw_file <- cs_raw_file |>
+  mutate(
+    D_term = case_when(
+      str_detect(D_course_name, "-\\s*A\\s*\\*?\\s*$") ~ "S1",
+      str_detect(D_course_name, "-\\s*B\\s*\\*?\\s*$") ~ "S2",
+      TRUE ~ "FY"
+    )
+  )
+
+# Check course names for records with term FY
+check_fy_courses <- cs_raw_file |>
+  filter(D_term == "FY") |>
+  group_by(D_course_name) |>
+  summarise(count = n())
+
+# %%
+# Join period and rotation data by expression
+cs_raw_file <- cs_raw_file |>
+  select(
+    -D_period,
+    -D_rotation
+  ) |>
+    left_join(
+      expression_coded,
+      by = "D_expression"
+  )
+
+# check distribution of term, period, rotation
+check_tpr <- cs_raw_file |>
+  group_by(
+    D_term,
+    D_expression,
+    D_period,
+    D_rotation
+  ) |>
+    summarise(count = n())
 
 # e. Re-run Validation after resolution ----
 
@@ -795,9 +824,6 @@ na_summary_by_course <- cs_raw_file %>%
   filter(rows_with_any_na > 0) %>%
   arrange(desc(rows_with_any_na), D_course_name)
 
-# View results
-View(na_summary_by_course)
-
 
 # c. Remove records for students without demographic data ----
 
@@ -877,7 +903,6 @@ dups_cs_raw_file <- cs_raw_file %>%
   group_by_all() %>%
  mutate(n = n()) %>%
     filter(n>1)
-view(dups_cs_raw_file)
 
 #add nrows to checks table
 update_check(
@@ -913,40 +938,6 @@ update_check(
      status = "Done" # Update status if it has changed. Do not change any other values
 ) %>% head
 get_checks_table() # Print a record of all the most recent checks
-
-
-# 3.4 Detroit Course Coding ----
-# %% c. Join period and rotation data by expression
-cs_raw_file <- cs_raw_file |>
-  select(
-    -D_period,
-    -D_rotation
-  ) |>
-    left_join(
-      expression_coded,
-      by = "D_expression"
-  )
-
-course_coding <- cs_raw_file |>
-  filter(D_year_id == 2024) |>
-  filter(!is.na(D_period)) |>
-  select(
-    D_year_id,
-    D_course_id,
-    D_course_name,
-    C_sced_code,
-    D_location_name,
-    C_eem_code
-  ) |>
-    group_by_all() |>
-    summarise(count = n())
-
-# %% b. Export coding data
-ers_write_sharepoint(
-  data = course_coding,
-  folder_path = raw_data_folder_path,
-  file_name_with_extension = 
-    "/1. Coding/course_coding_data.csv")
 
 # ------------
   # 3.4 Count of Periods at each school ----
@@ -993,7 +984,6 @@ checks_table <- update_check(
 )
 
 get_checks_table() # Print a record of all the most recent checks
-View(count_periods_by_school)
 
 
 
@@ -1029,8 +1019,6 @@ cs_raw_file %>%
   arrange(D_location_name) %>% 
   group_by(D_location_name) %>% 
   mutate(percent_students = round(100*student_count/sum(student_count),0))
-
-View(count_term_by_school)
 
 
 # 3.6 Distinct Count of Course IDs by Teacher ID ----
@@ -1073,8 +1061,6 @@ course_count_by_bucket <- course_count_list %>%
     total_teachers = total_teachers,
     pct_of_total = round(100 * (n / total_teachers), 2)
   )
-
-View(course_count_by_bucket)
 
 
 
@@ -1175,8 +1161,6 @@ student_count_by_bucket <- student_count_list %>%
     pct_of_total = round(100 * (n / total_teachers), 2)
   )
 
-View(student_count_by_bucket)
-
 
 # b. Investigate teachers with large number of student IDs ----
 
@@ -1193,13 +1177,6 @@ teacher_load_large <- cs_raw_file %>%
   left_join(student_count_list, by = "D_employee_id") %>%
   filter(student_count > 200) %>%
   arrange(-student_count,D_employee_id)
-
-View(teacher_load_large %>% 
-  group_by(D_course_name) %>% 
-  summarise(
-    avg_student_count = round(mean(student_count), digits = 0),
-    teacher_count = n_distinct(D_employee_id)) %>% 
-  arrange(-avg_student_count))
   
 print(n_distinct(teacher_load_large$D_employee_id))
 
@@ -1236,8 +1213,6 @@ student_count_by_bucket <- student_course_count_list %>%
     pct_of_total = round(100 * (n / total_students), 2)
   )
 
-View(student_count_by_bucket)
-
 
 # b. Investigate students with small number of courses ----
 
@@ -1257,10 +1232,10 @@ student_course_count_small <- cs_raw_file %>%
   filter(course_count < 3) %>%
   select(-n)
 
-View(student_course_count_small %>% 
+student_course_count_small %>% 
   group_by(D_course_name) %>% 
   summarise(avg_course_count = round(mean(course_count), digits = 0),
-            stu_count = n_distinct(D_stu_id)))
+            stu_count = n_distinct(D_stu_id))
 
 
 # 3.9 Distinct Count of Students per Subject per Grade ----
