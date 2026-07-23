@@ -1,66 +1,71 @@
----
-title: "1_Raw_Data_Validation"
-author: "Zach Friedman + Liz"
-date: "`r Sys.Date()`"
-output:
-  html_document:
-    toc: yes
-    df_print: paged
-  word_document:
-    keep_md: yes
-    toc: yes
-file summary: This file loads in course schedule data and validates the data
-reviewer: Jenny Katz
-editor_options:
-  markdown:
-    wrap: 72
----
+# Converted from 01-raw-data-validation(1).Rmd
+# Each original executable R Markdown chunk is a Positron # %% code cell.
 
-```{r setup, include=FALSE}
+# R Markdown metadata ----
+# title: "1_Raw_Data_Validation"
+# author: "Zach Friedman + Liz"
+# date: "`r Sys.Date()`"
+# output:
+#   html_document:
+#     toc: yes
+#     df_print: paged
+#   word_document:
+#     keep_md: yes
+#     toc: yes
+# file summary: This file loads in course schedule data and validates the data
+# reviewer: Jenny Katz
+# editor_options:
+#   markdown:
+#     wrap: 72
+
+
+# %% setup
+# Original R Markdown options: include=FALSE
 knitr::opts_chunk$set(echo = TRUE)
-```
 
-# Key Links
 
-- [Data
-  Dictionary:](https://erstrategies1.sharepoint.com/:x:/s/orgfiles/EW4fU7_js69Hl9DzoYTuB7gBVUamadRtarFtyz6-5jampA?e=c5s2Ev)
+# Key Links ----
 
-- [Style
-  Guide:](https://app.tettra.co/teams/ersknowledge/pages/coding-style-guide)
+# - [Data
+#   Dictionary:](https://erstrategies1.sharepoint.com/:x:/s/orgfiles/EW4fU7_js69Hl9DzoYTuB7gBVUamadRtarFtyz6-5jampA?e=c5s2Ev)
 
-- [Data Request and
-  Validation](https://erstrategies1.sharepoint.com/:x:/s/orgfiles/EcSQElbD3mlMsc_HzVYj_KUBJfCavz6HVlHWD7cN3PAAKw?e=CuNtD8)
+# - [Style
+#   Guide:](https://app.tettra.co/teams/ersknowledge/pages/coding-style-guide)
 
-# Overview of Script
+# - [Data Request and
+#   Validation](https://erstrategies1.sharepoint.com/:x:/s/orgfiles/EcSQElbD3mlMsc_HzVYj_KUBJfCavz6HVlHWD7cN3PAAKw?e=CuNtD8)
 
-# Part I: Setup
+# Overview of Script ----
 
-This part of the script allows you to:
+# Part I: Setup ----
 
-- Load the functions that R will be using to work with your data (Excel
-  automatically loads all its functions - if, countif, index, match,
-  etc. - when you open it, but R requires manual loading of functions if
-  you want full access to what it offers)
+# This part of the script allows you to:
 
-- Specify the SharePoint folder where your raw data lives so R can pull
-  it in
+# - Load the functions that R will be using to work with your data (Excel
+#   automatically loads all its functions - if, countif, index, match,
+#   etc. - when you open it, but R requires manual loading of functions if
+#   you want full access to what it offers)
 
-- Actually load in the raw data you'll be working with throughout the
-  rest of the script
+# - Specify the SharePoint folder where your raw data lives so R can pull
+#   it in
 
-## 1.1 Load Packages
+# - Actually load in the raw data you'll be working with throughout the
+#   rest of the script
 
-**What:** This code block loads in all relevant function packages
-(a.k.a. R functions you'll be needing in this script). Note that if you
-haven't installed the packages into your computer yet, R will print an
-error and you'll need to install them first by running
-install.packages(tidyverse) and install.packages(formattable), etc.
+# 1.1 Load Packages ----
 
-**Check:** no error message coming out of code block
+# **What:** This code block loads in all relevant function packages
+# (a.k.a. R functions you'll be needing in this script). Note that if you
+# haven't installed the packages into your computer yet, R will print an
+# error and you'll need to install them first by running
+# install.packages(tidyverse) and install.packages(formattable), etc.
 
-**Project Team Action:** do not change (run as is)
+# **Check:** no error message coming out of code block
 
-```{r setup & load data, include=FALSE}
+# **Project Team Action:** do not change (run as is)
+
+# %% setup & load data
+# Original R Markdown options: include=FALSE
 # Remove everything from any previous sessions
 rm(list = ls())
 
@@ -119,51 +124,61 @@ client_work_drive <- orgfiles_site$get_drive("Client Work")
 
 #see all folders in internal work drive
 internal_drive <- orgfiles_site$get_drive("Internal")
-```
 
-## 1.2 Declare Variables
 
-**What:** For R to know where to access your raw data, it needs to know
-where the raw data is located in SharePoint and the file names. The code
-block below allows you to first name your username (in the structure
-"C:/Users/username", which is typically the beginning of a folder path)
-and then the path to reach your folder with the raw data.
+# 1.2 Declare Variables ----
 
-**Check:** The code block should print the folder path to your raw data.
+# **What:** For R to know where to access your raw data, it needs to know
+# where the raw data is located in SharePoint and the file names. The code
+# block below allows you to first name your username (in the structure
+# "C:/Users/username", which is typically the beginning of a folder path)
+# and then the path to reach your folder with the raw data.
 
-**Project Team Action:** definitely change (see action guidance in code
-block)
+# **Check:** The code block should print the folder path to your raw data.
 
-### b. File Path
+# **Project Team Action:** definitely change (see action guidance in code
+# block)
 
-Take green comments and move directly above code chunk
+# b. File Path ----
 
-```{r}
+# Take green comments and move directly above code chunk
+
+# %% b. File Path
 # Create folder path
-raw_data_folder_path <- "District Partners/Detroit Public Schools/24-25 - HS Redesign Follow-on 2/1. Data & Analysis - Secure"
-```
+raw_data_folder_path <- "District Partners/Detroit Public Schools/26-27 HS Redesign Implementation/1. Data & Analysis - Secure/Fall 2026 Course Schedule Analysis"
 
-## 1.3 Load Data
 
-**What:** Now that R knows how to access the folder path, it's time to
-load in your raw data
+# 1.3 Load Data ----
 
-**Check:** the code block should print the names of all data files you
-need.
+# **What:** Now that R knows how to access the folder path, it's time to
+# load in your raw data
 
-**Project Team Action:** None
+# **Check:** the code block should print the names of all data files you
+# need.
 
-```{r}
+# **Project Team Action:** None
+
+# %% 1.3 Load Data
 # Load course schedule data
 cs_raw_file <- ers_read_sharepoint(
   folder_path = raw_data_folder_path,
   file_name_with_extension =
-    "/course_sections_250214.csv")
+    "/0. Raw Data/course_sections_250214.csv")
 
-cs_validated_file <- ers_read_sharepoint(
+expression_coded <- ers_read_sharepoint(
   folder_path = raw_data_folder_path,
   file_name_with_extension =
-    "/1.1 Validated Data/course_sections_24_25_with_CTC.csv")
+    "/1. Coding/expression_coded.xlsx")
+
+location_coded <- ers_read_sharepoint(
+  folder_path = raw_data_folder_path,
+  file_name_with_extension =
+    "/1. Coding/location_coded.xlsx")
+
+#cs_validated_file <- ers_read_sharepoint(
+#  folder_path = raw_data_folder_path,
+#  file_name_with_extension =
+#    "/1.1 Validated Data/course_sections_24_25_with_CTC.csv")
 
 # Load student demographic data
 #stu_demographics <- ers_read_sharepoint(
@@ -171,23 +186,24 @@ cs_validated_file <- ers_read_sharepoint(
 #  file_name_with_extension =
 #    "/Raw Data/student_enrollment_and_demographic.xlsx")
 
-```
 
-# Part II: Pre-Validation Setup
 
-## 2.1 Create Checks Table
+# Part II: Pre-Validation Setup ----
 
-- **What:** Creates a function that adds a data validation check to a
-  main table and that groups the checks table by all types of checks and
-  outputs just the most recent row for each check.
+# 2.1 Create Checks Table ----
 
-- **Check:** No output should be printed but you still must run the
-  code. Running the code more than once is OK and will not cause any
-  issues.
+# - **What:** Creates a function that adds a data validation check to a
+#   main table and that groups the checks table by all types of checks and
+#   outputs just the most recent row for each check.
 
-- **Project Team Action:** do not change (run as is)
+# - **Check:** No output should be printed but you still must run the
+#   code. Running the code more than once is OK and will not cause any
+#   issues.
 
-```{r, warning = F, message = F}
+# - **Project Team Action:** do not change (run as is)
+
+# %% 2.1 Create Checks Table
+# Original R Markdown options: warning = F, message = F
 
 # create checks table in the current GitHub repo
 checks_file_csv <- "checks_table.csv"
@@ -259,21 +275,21 @@ update_check <- function(check_id_value,
 get_checks_table <- function(file_path = checks_file_csv) {
   init_checks_table(file_path)
 }
-```
 
-## 2.2 Understand File Structure
 
-### a. Number of total rows
+# 2.2 Understand File Structure ----
 
-- **What:** Understand the structure of your file by loading the number
-  of rows
+# a. Number of total rows ----
 
-- **Check:** The number of rows should be roughly 8 times the number of
-  students in the district
+# - **What:** Understand the structure of your file by loading the number
+#   of rows
 
-- **Project Team Action:** Update status if necessary
+# - **Check:** The number of rows should be roughly 8 times the number of
+#   students in the district
 
-```{r}
+# - **Project Team Action:** Update status if necessary
+
+# %% a. Number of total rows
 # Count number of rows
 update_check(
   check_id = 1,
@@ -287,25 +303,31 @@ checks_table <- get_checks_table()
 
 get_checks_table()
 
-```
 
-### b. Number of total students
 
-- **What:** Transform your data if necessary. You can also leave a note
-  about district follow-up required if the team did not receive the full
-  data set.
+# b. Number of total students ----
 
-- **Check:** The number of rows should be roughly 8 times the number of
-  students in the district
+# - **What:** Transform your data if necessary. You can also leave a note
+#   about district follow-up required if the team did not receive the full
+#   data set.
 
-- **Project Team Action:** maybe change (see guidance in code block)
+# - **Check:** The number of rows should be roughly 8 times the number of
+#   students in the district
 
-```{r}
+# - **Project Team Action:** maybe change (see guidance in code block)
+
+# %% b. Number of total students
 # Count number of unique students
+cs_raw_file <- cs_raw_file |>
+  mutate(
+    D_stu_id = `DPSCD Masked Student Id`,
+    .keep = "unused")
+
+
 update_check(
   check_id = 2,
   check_name = "Number of students", 
-  value = n_distinct(cs_raw_file$MaskedStudentID),
+  value = n_distinct(cs_raw_file$D_stu_id),
   notes = "Should match what you'd expect from public data",
   status = "Done"
   )
@@ -313,55 +335,55 @@ update_check(
 checks_table <- get_checks_table()
 
 get_checks_table()
-```
 
-## 2.3 Column Mapping
 
-### a. Review current columns
+# 2.3 Column Mapping ----
 
-- **What:** View the data as a table to understand the values in each
-  column.
+# a. Review current columns ----
 
-- **Check:** A new tab is created with a table view of your data
+# - **What:** View the data as a table to understand the values in each
+#   column.
 
-- **Project Team Action:** do not change (run as is)
+# - **Check:** A new tab is created with a table view of your data
 
-```{r}
+# - **Project Team Action:** do not change (run as is)
+
+# %% a. Review current columns
 # View raw data
 View(cs_raw_file)
 
 # Print list of column names
 names(cs_raw_file)
-```
 
-### b. Map project columns to ERS Standard Names
 
-- **What:** Assign your project's column names to ERS standard column
-  names. ERS Standard names are on the left side of the equal sign, your
-  district's columns are on the right. See resolution of
-  critical/important fields that are missing in step 2.2b. Having
-  standard column names is critical for this code running without error.
+# b. Map project columns to ERS Standard Names ----
 
-- **Check:** In your data, all the critical fields are present and most
-  of the important fields are present. Align with your project lead on
-  which fields are critical based on your project's context. For
-  exmaple:
+# - **What:** Assign your project's column names to ERS standard column
+#   names. ERS Standard names are on the left side of the equal sign, your
+#   district's columns are on the right. See resolution of
+#   critical/important fields that are missing in step 2.2b. Having
+#   standard column names is critical for this code running without error.
 
-  - If you received active course enrollments from snapshot in time vs.
-    all historical course enrollments from that year
+# - **Check:** In your data, all the critical fields are present and most
+#   of the important fields are present. Align with your project lead on
+#   which fields are critical based on your project's context. For
+#   exmaple:
 
-  - If you received Period and Rotation as an "Expression" - e.g.,
-    "2-8(A)", "7(B)", "1-4(A), 6-8(B)", etc. This is how it's typically
-    exported from the Student Information System (SIS) PowerSchool. If a
-    record has Expression "2-8(A)", then that student has that course
-    during Periods 2 through 8 on A days. You'll deal with "exploding"
-    this record in the 04-db-explosions script, so don't worry about it
-    for now!
+#   - If you received active course enrollments from snapshot in time vs.
+#     all historical course enrollments from that year
 
-- **Project Team Action:** definitely change (see guidance in code
-  block)
+#   - If you received Period and Rotation as an "Expression" - e.g.,
+#     "2-8(A)", "7(B)", "1-4(A), 6-8(B)", etc. This is how it's typically
+#     exported from the Student Information System (SIS) PowerSchool. If a
+#     record has Expression "2-8(A)", then that student has that course
+#     during Periods 2 through 8 on A days. You'll deal with "exploding"
+#     this record in the 04-db-explosions script, so don't worry about it
+#     for now!
 
-```{r}
+# - **Project Team Action:** definitely change (see guidance in code
+#   block)
+
+# %% b. Map project columns to ERS Standard Names
 # If the ERS Standard column is present in your data then type your district's column on the right hand side (it is ok if the names are identical)
 # If the ERS Standard column is not present in your data then type "MISSING"
 
@@ -373,10 +395,11 @@ cs_raw_file <- cs_raw_file |>
   ) |>
   mutate(
     # Core fields
-    D_stu_id = MaskedStudentID,
-    D_employee_id = MaskedTeacherID,
-    D_year_id = Year_End,
+    # D_stu_id = `DPSCD Masked Student Id`,
+    D_employee_id = `DPSCD Masked Teacher Id`,
+    D_year_id = `Year End`,
     D_ccid = CCID,
+    D_users_dcid = USERS_DCID,
 
     D_course_id = `Course Number`,
     D_course_name = `Course Name`,
@@ -384,20 +407,20 @@ cs_raw_file <- cs_raw_file |>
 
     D_term = "MISSING",
     D_expression = `Period Expression`,
-    D_period = str_trim(str_remove(`Period Expression`, "\\([^)]*\\)$")),
-    D_rotation = str_extract(`Period Expression`, "(?<=\\()[^)]+(?=\\)$)"),
+    D_period = "MISSING",
+    D_rotation = "MISSING",
     # D_location_id = SCHOOL_ID,
     D_location_name = `School`,
 
     D_course_section = "MISSING",
-    D_course_section_id = "MISSING",
+    #D_course_section_id = "MISSING",
     D_stu_grade = "MISSING",
 
     # Enrollment dates
     D_stu_enter_date = `Date Enrolled`,
     D_stu_exit_date = `Date Left`,
-    D_course_start_date = "MISSING",
-    D_course_end_date = "MISSING",
+    #D_course_start_date = "MISSING",
+    #D_course_end_date = "MISSING",
 
     # Additional source fields
     C_sced_code = `SCED Code`,
@@ -405,7 +428,7 @@ cs_raw_file <- cs_raw_file |>
     C_accelerated_course_flag = `Accelerated Course Flag`,
     C_virtual_flag = `Virtual Flag`,
     C_virtual_delivery_type = `Virtual Delivery Type`,
-    C_eem_code = EEM_CODE,
+    C_eem_code = `EEM Code`,
 
     # Important fields not provided
     D_course_credit_recovery = "MISSING",
@@ -413,7 +436,7 @@ cs_raw_file <- cs_raw_file |>
     D_course_swd_flag = "MISSING",
     D_course_rigor = "MISSING",
     D_course_format = "MISSING",
-    D_home_school = "MISSING",
+    #D_home_school = "MISSING",
 
     D_stu_swd_flag = "MISSING",
     D_stu_ell_flag = "MISSING",
@@ -421,30 +444,42 @@ cs_raw_file <- cs_raw_file |>
     D_stu_race = "MISSING",
 
     # Nice-to-have fields not provided
-    D_course_pathway = "MISSING",
-    D_cte_flag = "MISSING",
-    D_class_size_max = "MISSING",
-    D_credits_earned = "MISSING",
-    D_credits_possible = "MISSING",
-    D_period_start_time = "MISSING",
-    D_period_end_time = "MISSING",
-    D_room = "MISSING",
+    #D_course_pathway = "MISSING",
+    #D_cte_flag = "MISSING",
+    #D_class_size_max = "MISSING",
+    #D_credits_earned = "MISSING",
+    #D_credits_possible = "MISSING",
+    #D_period_start_time = "MISSING",
+    #D_period_end_time = "MISSING",
+    #D_room = "MISSING",
 
     .keep = "unused"
   )
-```
 
-### c. Review Missing Columns
 
-- **What:** List all of the columns that are missing
+# %% Check expression --> period and rotation conversion
+# Check expression --> period and rotation conversion
+expression_check <- cs_raw_file |>
+  group_by(
+    D_expression,
+    D_period,
+    D_rotation
+  ) |>
+    summarise(count = n())
 
-- **Check:** Ensure that none of these fields are necessary for your
-  analysis. If they are necessary, then the missing columns must be
-  resolved in step 2.2b
 
-- **Project Team Action:** do not change (run as is)
 
-```{r}
+# c. Review Missing Columns ----
+
+# - **What:** List all of the columns that are missing
+
+# - **Check:** Ensure that none of these fields are necessary for your
+#   analysis. If they are necessary, then the missing columns must be
+#   resolved in step 2.2b
+
+# - **Project Team Action:** do not change (run as is)
+
+# %% c. Review Missing Columns
 # Create function called "check_missing_columns" that prints out all columns that have any values of "MISSING"
 
 update_check(
@@ -462,110 +497,110 @@ update_check(
 checks_table <- get_checks_table()
 
 get_checks_table()
-```
 
-### d. Add or edit critical columns
 
-- **What:** Resolve missing columns that are necessary for your analysis and add them so the code will run smoothly.
+# d. Add or edit critical columns ----
 
-- **Check:** Columns that you resolved do not show up in the code chunk below that checks for missing columns
+# - **What:** Resolve missing columns that are necessary for your analysis and add them so the code will run smoothly.
 
-- **Project Team Action:** change depending on your files needs. The below example is from Springfield that needed to update Period to "MISSING" and pull in student demographic data to update the student-level flags. You do not need to do either of these things, but this is an example of how you might resolve missing critical fields. If you have other critical fields that are missing, you should resolve them here and then re-run the check for missing columns to ensure they are resolved.
+# - **Check:** Columns that you resolved do not show up in the code chunk below that checks for missing columns
 
-**Project Example:** Updating column D_period
+# - **Project Team Action:** change depending on your files needs. The below example is from Springfield that needed to update Period to "MISSING" and pull in student demographic data to update the student-level flags. You do not need to do either of these things, but this is an example of how you might resolve missing critical fields. If you have other critical fields that are missing, you should resolve them here and then re-run the check for missing columns to ensure they are resolved.
 
-```{r}
+# **Project Example:** Updating column D_period
+
+# %% Project Example: Updating column D_period
 # Convert to string
-cs_raw_file <- cs_raw_file |>
-  mutate(D_course_section = as.character(D_course_section))
+#cs_raw_file <- cs_raw_file |>
+#  mutate(D_course_section = as.character(D_course_section))
 
 # Remove blank perriod and cycle day ID columns
-cs_raw_file <- cs_raw_file %>%
-  select(-CYCLE_DAY_ID, -Period)
+#cs_raw_file <- cs_raw_file %>%
+#  select(-CYCLE_DAY_ID, -Period)
 
-```
 
-```{r}
+
+# %% d. Add or edit critical columns
 # View student demographic data
-View(stu_demographics)
+#View(stu_demographics)
 
 # Print list of column names
-names(stu_demographics)
+#names(stu_demographics)
 
 # Convert decimals into integers
-stu_demographics <- stu_demographics |>
-  mutate(across(where(is.numeric), ~ if (all(. %% 1 == 0, na.rm = TRUE)) as.integer(.) else .))
+#stu_demographics <- stu_demographics |>
+#  mutate(across(where(is.numeric), ~ if (all(. %% 1 == 0, na.rm = TRUE)) as.integer(.) else .))
 
 # Update column names in student demographic file
-stu_demographics <- stu_demographics %>% 
-  rename(D_stu_id = Stu_ID,
-         D_stu_grade = `Current Grade Level ID`,
-         D_location_id = `SIS School ID`,
-         D_stu_swd_flag = `Stu_SWD flag`,
-         D_stu_ell_flag = `Stu_ELL flag`,
-         D_stu_poverty_flag = `Stu_Poverty Flag`)
+#stu_demographics <- stu_demographics %>% 
+#  rename(D_stu_id = Stu_ID,
+#         D_stu_grade = `Current Grade Level ID`,
+#         D_location_id = `SIS School ID`,
+#         D_stu_swd_flag = `Stu_SWD flag`,
+#         D_stu_ell_flag = `Stu_ELL flag`,
+#         D_stu_poverty_flag = `Stu_Poverty Flag`)
 
 # Check that student demographics file has only one row per stu_id
-stu_demographics %>% 
-  group_by(D_stu_id) %>% 
-  summarise(count = n()) %>% 
-  group_by(count) %>% 
-  summarise(count_sum = sum(count),
-            stu_count = n_distinct(D_stu_id))
-```
+#stu_demographics %>% 
+#  group_by(D_stu_id) %>% 
+#  summarise(count = n()) %>% 
+#  group_by(count) %>% 
+#  summarise(count_sum = sum(count),
+#            stu_count = n_distinct(D_stu_id))
 
-```{r}
+
+# %% Join demographics file
 # Join demographics file
 # Prepare demographics data for merge
-stu_demographics <- stu_demographics |>
-  mutate(across(
-    c(D_stu_swd_flag, D_stu_ell_flag, D_stu_poverty_flag),
-    ~ recode(.x, "Y" = 1L, "N" = 0L) |> as.integer()
-  )) |> 
-  select(D_stu_id, D_stu_grade, D_stu_swd_flag, D_stu_ell_flag, D_stu_poverty_flag)
+#stu_demographics <- stu_demographics |>
+#  mutate(across(
+#    c(D_stu_swd_flag, D_stu_ell_flag, D_stu_poverty_flag),
+#    ~ recode(.x, "Y" = 1L, "N" = 0L) |> as.integer()
+#  )) |> 
+#  select(D_stu_id, D_stu_grade, D_stu_swd_flag, D_stu_ell_flag, D_stu_poverty_flag)
 
 # Remove placeholder columns, then merge
-cs_raw_file <- cs_raw_file %>%
-  select(-D_stu_grade,
-         -D_stu_swd_flag,
-         -D_stu_ell_flag,
-         -D_stu_poverty_flag) %>%
-  left_join(stu_demographics,
-            by = "D_stu_id")
+#cs_raw_file <- cs_raw_file %>%
+#  select(-D_stu_grade,
+#         -D_stu_swd_flag,
+#         -D_stu_ell_flag,
+#         -D_stu_poverty_flag) %>%
+#  left_join(stu_demographics,
+#            by = "D_stu_id")
 
-```
 
-```{r}
-# Check rows with blank D_course_section (this is a critical field for creating C_class_id, so we need to resolve these blanks before moving forward)
-blank_course_section <- cs_raw_file %>% 
-  filter(is.na(D_course_section) | D_course_section == "") %>% 
-  group_by(D_course_name, D_course_id, D_location_name, D_term, D_expression, D_course_section) |> 
-  summarise(n = n())
 
-# Update D_course_id and D_course_section where they're blank
-cs_raw_file <- cs_raw_file %>%
-  mutate(
-    D_course_id = case_when(
-      D_course_name == "BBF Academy" ~ bit64::as.integer64(99999999),
-      D_course_name == "VHS Anchor Year" ~ bit64::as.integer64(88888888),
-      TRUE ~ D_course_id
-    ),
-    D_course_section = case_when(
-      is.na(D_course_section) ~ paste0(D_course_id, D_expression),
-      TRUE ~ D_course_section))
+# %%
+# Detroit: filter for rows with D_location_name (other rows are for elementary and middle schools)
+cs_raw_file <- cs_raw_file |>
+  filter(!is.na(D_location_name))
 
-```
 
-### e. Re-run Validation after resolution
+# %%
+# Merge in flag from location_coded: if C_eem_code is in location_coded, create new column C_location_type = "Neighborhood School", else "Non-Neighborhood School"
+cs_raw_file <- cs_raw_file |>
+  left_join(
+    location_coded,
+    by = c(
+      "D_location_name",
+      "C_eem_code"
+  )
+)
 
-- **What:** check the missing columns once again to ensure the issues
-  were resolved
+# Filter out data from non-neighborhood schools
+cs_raw_file <- cs_raw_file |>
+  filter(!is.na(C_location_type))
 
-- **Check:** No important columns should be missing
+# e. Re-run Validation after resolution ----
 
-- **Project Team Action:** Update the status as necessary
+# - **What:** check the missing columns once again to ensure the issues
+#   were resolved
 
-```{r}
+# - **Check:** No important columns should be missing
+
+# - **Project Team Action:** Update the status as necessary
+
+# %% e. Re-run Validation after resolution
 # Rerun check
 update_check(
      check_id = 3,
@@ -582,74 +617,74 @@ update_check(
 checks_table <- get_checks_table()
 
 get_checks_table()
-```
 
-# Part III: Validation checks
 
-## 3.1 What year(s) of data do we have?
+# Part III: Validation checks ----
 
-- **What:** Understand if we have the correct year of data.
-  **IMPORTANT!** This is only necessary if you if receive all historical
-  course enrollments (i.e., if your data is NOT a snapshot in time)
+# 3.1 What year(s) of data do we have? ----
 
-- **Check:** Ensure you know how many years of data are present and if
-  it the years are correct.
+# - **What:** Understand if we have the correct year of data.
+#   **IMPORTANT!** This is only necessary if you if receive all historical
+#   course enrollments (i.e., if your data is NOT a snapshot in time)
 
-- **Project Team Action:** Change status as necessary
+# - **Check:** Ensure you know how many years of data are present and if
+#   it the years are correct.
 
-```{r}
+# - **Project Team Action:** Change status as necessary
+
+# %% 3.1 What year(s) of data do we have?
 # Update the Date columns from character to date 
-#cs_raw_file <- cs_raw_file %>% mutate(D_stu_exit_date = mdy(D_stu_exit_date))
-#cs_raw_file <- cs_raw_file %>% mutate(D_stu_enter_date = mdy(D_stu_enter_date))
+cs_raw_file <- cs_raw_file %>% mutate(D_stu_exit_date = mdy(D_stu_exit_date))
+cs_raw_file <- cs_raw_file %>% mutate(D_stu_enter_date = mdy(D_stu_enter_date))
 
 # Now get the max and min dates
-#max_date <- max(cs_raw_file$D_stu_enter_date, na.rm = TRUE)
-#min_date <- min(cs_raw_file$D_stu_enter_date, na.rm = TRUE)
+max_date <- max(cs_raw_file$D_stu_enter_date, na.rm = TRUE)
+min_date <- min(cs_raw_file$D_stu_enter_date, na.rm = TRUE)
 
 
 # Then add them to the data validation check table
-#update_check(
-#     check_id = 3,
-#     check_name = "Year of Data", 
-#     value = paste0(min_date, " through ", max_date),
-#     notes = "Our year should align with expectations",
-#     status = "Done" # Update if it has changed. Do not change any other values
-#)
-#checks_table <- get_checks_table()
+update_check(
+     check_id = 3,
+     check_name = "Year of Data", 
+     value = paste0(min_date, " through ", max_date),
+     notes = "Our year should align with expectations",
+     status = "Done" # Update if it has changed. Do not change any other values
+)
+checks_table <- get_checks_table()
 
-#get_checks_table()
+get_checks_table()
 
-```
 
-## 3.2 Missing & Unique values
 
-### a. Update Blanks or NULL to NA
+# 3.2 Missing & Unique values ----
 
-- **What**: This will update all blanks ("") or nulls with NA, a special
-  value in R that denotes missing data. This will make it easier to deal
-  with missing data throughout the code.
-- **Check**: see below
-- **Project Team Action**: None
+# a. Update Blanks or NULL to NA ----
 
-```{r}
+# - **What**: This will update all blanks ("") or nulls with NA, a special
+#   value in R that denotes missing data. This will make it easier to deal
+#   with missing data throughout the code.
+# - **Check**: see below
+# - **Project Team Action**: None
+
+# %% a. Update Blanks or NULL to NA
 # Update blanks or NULL to NA
 cs_raw_file <- cs_raw_file %>%
   mutate(across(everything(), ~if_else(. %in% c("", NULL), NA, .)))
-```
 
-### b. Review data with blanks or NAs
 
-- **What:** Understand if we have any blanks or NAs in key fields
+# b. Review data with blanks or NAs ----
 
-- **Check:** -- Are there any critical columns with NA or blank values?
-  -- Do the Unique values for things like Teacher ID, Student ID, and
-  D_location match expectations?
+# - **What:** Understand if we have any blanks or NAs in key fields
 
-- **Project Team Action:** review output and note any key columns with a
-  large % of missing values. Are they critical? Do you need to ask
-  district about missing data? Discuss any issues with project team.
+# - **Check:** -- Are there any critical columns with NA or blank values?
+#   -- Do the Unique values for things like Teacher ID, Student ID, and
+#   D_location match expectations?
 
-```{r}
+# - **Project Team Action:** review output and note any key columns with a
+#   large % of missing values. Are they critical? Do you need to ask
+#   district about missing data? Discuss any issues with project team.
+
+# %% b. Review data with blanks or NAs
 # Create new data frame with column information
 col_info <-  data.frame(
   Column_Name = names(cs_raw_file),
@@ -689,19 +724,19 @@ update_check(
 ) %>% head
 get_checks_table() #print a record of all the most recent checks
 
-# Schools
+# Schools (LK: changed from ID to name)
 update_check(
      check_id = 6,
-     check_name = "Unique count of school IDs", 
-     value = cs_raw_file %>% pull(D_location_id) %>% unique %>% length(),
+     check_name = "Unique count of school names", 
+     value = cs_raw_file %>% pull(D_location_name) %>% unique %>% length(),
      notes = "Compare to public data",
      status = "Done" 
 ) %>% head
 get_checks_table() #print a record of all the most recent checks
 
-# Ratio of rows per student at each school
+# Ratio of rows per student at each school (LK: changed from ID to name)
 location_ratios <- cs_raw_file |>
-  group_by(D_location_id) |>
+  group_by(D_location_name) |>
   summarize(
     n_rows = n(),
     n_students = n_distinct(D_stu_id),
@@ -709,7 +744,7 @@ location_ratios <- cs_raw_file |>
     .groups = "drop"
   ) |>
   mutate(
-    ratio_str = paste0(D_location_id, ": ", round(ratio, 2))
+    ratio_str = paste0(D_location_name, ": ", round(ratio, 2))
   )
 
 value_str <- paste(location_ratios$ratio_str, collapse = ", ")
@@ -727,9 +762,9 @@ checks_table <- get_checks_table()
 get_checks_table()
 View(col_info)
 
-```
 
-```{r}
+
+# %% Check rows that have any NAs to see if these are records we should keep or remove
 # Check rows that have any NAs to see if these are records we should keep or remove
 # Identify columns with NA values
 cols_with_na <- col_info %>%
@@ -762,21 +797,21 @@ na_summary_by_course <- cs_raw_file %>%
 
 # View results
 View(na_summary_by_course)
-```
 
-### c. Remove records for students without demographic data
 
-- **What:** Remove rows that are missing key fields
+# c. Remove records for students without demographic data ----
 
-- **Check:** -- Are there any critical columns with NA or blank values?
-  -- Do the Unique values for things like Teacher ID, Student ID, and
-  D_location match expectations?
+# - **What:** Remove rows that are missing key fields
 
-- **Project Team Action:** review output and note any key columns with a
-  large % of missing values. Are they critical? Do you need to ask
-  district about missing data? Discuss any issues with project team.
+# - **Check:** -- Are there any critical columns with NA or blank values?
+#   -- Do the Unique values for things like Teacher ID, Student ID, and
+#   D_location match expectations?
 
-```{r}
+# - **Project Team Action:** review output and note any key columns with a
+#   large % of missing values. Are they critical? Do you need to ask
+#   district about missing data? Discuss any issues with project team.
+
+# %% c. Remove records for students without demographic data
 # Count unique students with NA in any demographic column
 n_students_na_demog <- cs_raw_file %>%
   filter(if_any(all_of(names(stu_demographics)), is.na)) %>%
@@ -796,9 +831,9 @@ get_checks_table() #print a record of all the most recent checks
 
 checks_table <- get_checks_table()
 
-```
 
-```{r}
+
+# %% Filter out records with missing student demographic data
 # Filter out records with missing student demographic data
 cs_raw_file <- cs_raw_file %>%
   filter(if_all(all_of(names(stu_demographics)), ~ !is.na(.)))
@@ -824,19 +859,19 @@ update_check(
 get_checks_table() #print a record of all the most recent checks
 
 checks_table <- get_checks_table()
-```
 
 
-## 3.3 Are there any duplicates?
 
-### a. Review Duplicates Table
+# 3.3 Are there any duplicates? ----
 
-- **What:** Understand if we have any fully duplicated rows
+# a. Review Duplicates Table ----
 
-- **Check:** Review the cs_raw_file_dups table to understand the
-  duplicates and why they are appearing before deleting
+# - **What:** Understand if we have any fully duplicated rows
 
-```{r}
+# - **Check:** Review the cs_raw_file_dups table to understand the
+#   duplicates and why they are appearing before deleting
+
+# %% a. Review Duplicates Table
 #View duplicates
 dups_cs_raw_file <- cs_raw_file %>%
   group_by_all() %>%
@@ -856,16 +891,16 @@ get_checks_table() #print a record of all the most recent checks
 
 checks_table <- get_checks_table()
 get_checks_table()
-```
 
-### b. Remove Duplicates
 
-- **What:** The below code chunk will remove the duplicate rows, so only
-  run once you feel confident they are true duplicates
+# b. Remove Duplicates ----
 
-- **Check:** That the number of duplicates is now 0
+# - **What:** The below code chunk will remove the duplicate rows, so only
+#   run once you feel confident they are true duplicates
 
-```{r}
+# - **Check:** That the number of duplicates is now 0
+
+# %% b. Remove Duplicates
 # Removes duplicates
 cs_raw_file <- cs_raw_file[!duplicated(cs_raw_file), ]
 
@@ -879,21 +914,54 @@ update_check(
 ) %>% head
 get_checks_table() # Print a record of all the most recent checks
 
-```
 
-## 3.4 Count of Periods at each school
+# 3.4 Detroit Course Coding ----
+# %% c. Join period and rotation data by expression
+cs_raw_file <- cs_raw_file |>
+  select(
+    -D_period,
+    -D_rotation
+  ) |>
+    left_join(
+      expression_coded,
+      by = "D_expression"
+  )
 
-- **What:** Count of records by period at each school
+course_coding <- cs_raw_file |>
+  filter(D_year_id == 2024) |>
+  filter(!is.na(D_period)) |>
+  select(
+    D_year_id,
+    D_course_id,
+    D_course_name,
+    C_sced_code,
+    D_location_name,
+    C_eem_code
+  ) |>
+    group_by_all() |>
+    summarise(count = n())
 
-- **Check:** Understand if we have similar # of records per period, by
-  school for "core periods" - after school, HR, or other non-core
-  periods might have fewer/more records
+# %% b. Export coding data
+ers_write_sharepoint(
+  data = course_coding,
+  folder_path = raw_data_folder_path,
+  file_name_with_extension = 
+    "/1. Coding/course_coding_data.csv")
 
-- **Project Action:** Review the tables to understand the different
-  periods at each school and if there is an even distribution of periods
-  in the school
+# ------------
+  # 3.4 Count of Periods at each school ----
 
-```{r}
+# - **What:** Count of records by period at each school
+
+# - **Check:** Understand if we have similar # of records per period, by
+#   school for "core periods" - after school, HR, or other non-core
+#   periods might have fewer/more records
+
+# - **Project Action:** Review the tables to understand the different
+#   periods at each school and if there is an even distribution of periods
+#   in the school
+
+# %% 3.4 Count of Periods at each school
 # View count of records by D_term/school
 count_periods_by_school <- cs_raw_file %>%
   filter(complete.cases(`D_period`)) %>%
@@ -927,19 +995,19 @@ checks_table <- update_check(
 get_checks_table() # Print a record of all the most recent checks
 View(count_periods_by_school)
 
-```
 
-## 3.5 Count of Term at each school
 
-- **What:** Count of records by term at each school
+# 3.5 Count of Term at each school ----
 
-- **check:** Review the tables to understand the different terms at each
-  school and if there is an even distribution of semester 1 and semester
-  2 classes
+# - **What:** Count of records by term at each school
 
-- **Project Action:** No updates
+# - **check:** Review the tables to understand the different terms at each
+#   school and if there is an even distribution of semester 1 and semester
+#   2 classes
 
-```{r}
+# - **Project Action:** No updates
+
+# %% 3.5 Count of Term at each school
 # View count of records by D_term/school
 count_term_by_school <- cs_raw_file %>%
   filter(complete.cases(`D_term`)) %>%
@@ -963,20 +1031,21 @@ cs_raw_file %>%
   mutate(percent_students = round(100*student_count/sum(student_count),0))
 
 View(count_term_by_school)
-```
 
-## 3.6 Distinct Count of Course IDs by Teacher ID
 
-### a. Return the count
+# 3.6 Distinct Count of Course IDs by Teacher ID ----
 
-- **What:** Count of teachers by distinct course count
+# a. Return the count ----
 
-- **check:** Review the counts teachers by course count. We would expect
-  majority of teachers to have between 3-10 classes.
+# - **What:** Count of teachers by distinct course count
 
-- **Project Action:** No updates
+# - **check:** Review the counts teachers by course count. We would expect
+#   majority of teachers to have between 3-10 classes.
 
-```{r echo=TRUE}
+# - **Project Action:** No updates
+
+# %% a. Return the count
+# Original R Markdown options: echo=TRUE
 # Creates a table that is the employee ID by number of courses they are teaching
 course_count_list <- cs_raw_file %>% 
   group_by(D_employee_id) %>% 
@@ -1007,20 +1076,20 @@ course_count_by_bucket <- course_count_list %>%
 
 View(course_count_by_bucket)
 
-```
 
-### b. Investigate teachers with large number of course IDs
 
-- **What:** Returns a list of teachers with high number of course IDs
-  and their student load
+# b. Investigate teachers with large number of course IDs ----
 
-- **Check:** We usually should not see more than 10 per term. Are there
-  any placeholder teacher ids that you want to exclude?
+# - **What:** Returns a list of teachers with high number of course IDs
+#   and their student load
 
-- **Project Action:** If you want to include more columns in your
-  investigation, add them at the end of the list in the select() clause
+# - **Check:** We usually should not see more than 10 per term. Are there
+#   any placeholder teacher ids that you want to exclude?
 
-```{r}
+# - **Project Action:** If you want to include more columns in your
+#   investigation, add them at the end of the list in the select() clause
+
+# %% b. Investigate teachers with large number of course IDs
 #bring the course count flags back
 teacher_course_count_large <- cs_raw_file %>% 
   left_join(course_count_list, by = "D_employee_id") %>%
@@ -1037,20 +1106,20 @@ teacher_course_count_large <- cs_raw_file %>%
           course_size)
 
 print(n_distinct(teacher_course_count_large$D_employee_id))
-```
 
-### c. Investigate teachers with small number of course IDs
 
-- **What:** Returns a list of teachers with high number of course IDS
-  and their student load
+# c. Investigate teachers with small number of course IDs ----
 
-- **check:** We usually should not see more then 10 per D_term. Are
-  there any placeholder teacher ids that you want to exclude?
+# - **What:** Returns a list of teachers with high number of course IDS
+#   and their student load
 
-- **Project Action:** If you want to include more columns in your
-  investigation, add them at the end of the list in the select() clause
+# - **check:** We usually should not see more then 10 per D_term. Are
+#   there any placeholder teacher ids that you want to exclude?
 
-```{r}
+# - **Project Action:** If you want to include more columns in your
+#   investigation, add them at the end of the list in the select() clause
+
+# %% c. Investigate teachers with small number of course IDs
 teacher_course_count_small <- cs_raw_file %>% 
   left_join(course_count_list, by = "D_employee_id") %>% 
   filter(course_count < 3) %>%
@@ -1062,21 +1131,21 @@ teacher_course_count_small <- cs_raw_file %>%
   arrange(D_employee_id, D_course_name, course_count, student_load, course_size)
 
 print(n_distinct(teacher_course_count_small$D_employee_id))
-```
 
-## 3.7 Distinct count of students per teacher ID
 
-### a. Return the Count
+# 3.7 Distinct count of students per teacher ID ----
 
-- **What:** Returns a count of students per teacher id and then groups
-  into buckets
+# a. Return the Count ----
 
-- **Check:** For elementary, we typically see a load between 15-30
-  students; for secondary, can be 30 up to 180-200
+# - **What:** Returns a count of students per teacher id and then groups
+#   into buckets
 
-- **Project Action:** None needed
+# - **Check:** For elementary, we typically see a load between 15-30
+#   students; for secondary, can be 30 up to 180-200
 
-```{r}
+# - **Project Action:** None needed
+
+# %% a. Return the Count
 # Calculates the student count by unique courses 
 student_count_list <- cs_raw_file %>% 
   group_by(D_employee_id) %>% 
@@ -1107,18 +1176,18 @@ student_count_by_bucket <- student_count_list %>%
   )
 
 View(student_count_by_bucket)
-```
 
-### b. Investigate teachers with large number of student IDs
 
-- **What:** Returns a list of teachers with lots of students
+# b. Investigate teachers with large number of student IDs ----
 
-- **check:** Do they all make sense because of advisory, study hall,
-  electives, etc.?
+# - **What:** Returns a list of teachers with lots of students
 
-- **Project Action:** None needed
+# - **check:** Do they all make sense because of advisory, study hall,
+#   electives, etc.?
 
-```{r}
+# - **Project Action:** None needed
+
+# %% b. Investigate teachers with large number of student IDs
 teacher_load_large <- cs_raw_file %>% 
   group_by(D_employee_id, D_course_id, D_course_name) %>% 
   left_join(student_count_list, by = "D_employee_id") %>%
@@ -1133,16 +1202,16 @@ View(teacher_load_large %>%
   arrange(-avg_student_count))
   
 print(n_distinct(teacher_load_large$D_employee_id))
-```
 
-## 3.8. Distinct Count of Course IDs per student ID
 
-### a. Return the Counts
+# 3.8. Distinct Count of Course IDs per student ID ----
 
-```{r}
+# a. Return the Counts ----
+
+# %% a. Return the Counts
 student_course_count_list <- cs_raw_file %>% 
   group_by(D_stu_id) %>% 
-  summarize(course_count = n_distinct(D_course_section)) %>% 
+  summarize(course_count = n_distinct(D_course_id)) %>% 
   mutate(course_count_bucket = case_when(course_count == 0 ~ "0",
           course_count <= 2 ~ "01-2",
           course_count <= 4 ~ "03-4",
@@ -1168,19 +1237,19 @@ student_count_by_bucket <- student_course_count_list %>%
   )
 
 View(student_count_by_bucket)
-```
 
-### b. Investigate students with small number of courses
 
-- **What:** Returns a list of students with a small number of courses
+# b. Investigate students with small number of courses ----
 
-- **check:** Do they all make sense because of advisory, study hall,
-  electives, etc.?
+# - **What:** Returns a list of students with a small number of courses
 
-- **Project Action:** If you want to add more columns for your
-  investigation add to the group_by clause
+# - **check:** Do they all make sense because of advisory, study hall,
+#   electives, etc.?
 
-```{r}
+# - **Project Action:** If you want to add more columns for your
+#   investigation add to the group_by clause
+
+# %% b. Investigate students with small number of courses
 student_course_count_small <- cs_raw_file %>% 
   group_by(D_stu_id, D_course_section, D_course_name) %>%
   count() %>%
@@ -1192,80 +1261,80 @@ View(student_course_count_small %>%
   group_by(D_course_name) %>% 
   summarise(avg_course_count = round(mean(course_count), digits = 0),
             stu_count = n_distinct(D_stu_id)))
-```
 
-## 3.9 Distinct Count of Students per Subject per Grade
 
-- **What:** Returns the % of students per grade per school taking a
-  subject
+# 3.9 Distinct Count of Students per Subject per Grade ----
 
-- **check:** You are looking for wonky things - such as a low percentage
-  (less then 75%) of 5th graders taking a math class. We want to ensure
-  we have complete data
+# - **What:** Returns the % of students per grade per school taking a
+#   subject
 
-- **Project Action:** None
+# - **check:** You are looking for wonky things - such as a low percentage
+#   (less then 75%) of 5th graders taking a math class. We want to ensure
+#   we have complete data
 
-  ```{r}
-  View(student_subject_grade_count <- cs_raw_file %>% 
-    select(D_location_name,
-           D_stu_grade,
-           D_stu_id,
-           D_course_subject)%>% 
-    group_by(D_location_name,
-             D_stu_grade) %>% 
-    mutate(student_grade_count = n_distinct(D_stu_id)) %>% 
-    group_by(D_location_name,
-             D_stu_grade,
-             D_course_subject,
-             student_grade_count)%>% 
-    summarise(student_subject_count = n_distinct(D_stu_id)) %>% 
-    mutate(pct_of_total= 100*(student_subject_count / student_grade_count)) %>% 
-    arrange(D_location_name)
-    )
+# - **Project Action:** None
 
-  ```
+#   ```{r}
+#   View(student_subject_grade_count <- cs_raw_file %>% 
+#     select(D_location_name,
+#            D_stu_grade,
+#            D_stu_id,
+#            D_course_subject)%>% 
+#     group_by(D_location_name,
+#              D_stu_grade) %>% 
+#     mutate(student_grade_count = n_distinct(D_stu_id)) %>% 
+#     group_by(D_location_name,
+#              D_stu_grade,
+#              D_course_subject,
+#              student_grade_count)%>% 
+#     summarise(student_subject_count = n_distinct(D_stu_id)) %>% 
+#     mutate(pct_of_total= 100*(student_subject_count / student_grade_count)) %>% 
+#     arrange(D_location_name)
+#     )
 
-# Part IV. Export Tables
+#   ```
 
-## 5.1 Delete or Rename Extra Columns
+# Part IV. Export Tables ----
 
-- **What:**
+# 5.1 Delete or Rename Extra Columns ----
 
-  - Before exporting your data to use for all the upcoming scripts, take
-    out any columns that you won't need and rename any variables that
-    weren't given a standard name earlier.
+# - **What:**
 
-  - Note: renaming the non-standard columns kept in your data is
-    optional but can help you more easily identify these columns further
-    down the line - label the variables in the same way as the standard
-    variables with a D (district) tag and then the variable name all in
-    lower case and with underscores between words (e.g.
-    D_extra_variable)
+#   - Before exporting your data to use for all the upcoming scripts, take
+#     out any columns that you won't need and rename any variables that
+#     weren't given a standard name earlier.
 
-- **Check:** look at your data in the environment after running the code
-  block below and be sure that all your variables have the follow the
-  standard naming convention (D tag, lower case, underscores)
+#   - Note: renaming the non-standard columns kept in your data is
+#     optional but can help you more easily identify these columns further
+#     down the line - label the variables in the same way as the standard
+#     variables with a D (district) tag and then the variable name all in
+#     lower case and with underscores between words (e.g.
+#     D_extra_variable)
 
-- **Project Team Action:**
+# - **Check:** look at your data in the environment after running the code
+#   block below and be sure that all your variables have the follow the
+#   standard naming convention (D tag, lower case, underscores)
 
-  ```{r}
-  #cs_raw_file <- cs_raw_file %>% 
-    # Remove columns you don't need
-  #  select(-c(EXAMPLE_FIELD)) %>% 
-    # Rename columns to potentially use down the line
-  #  rename(D_example = EXAMPLE_FIELD)
-  ```
+# - **Project Team Action:**
 
-## 5.2 Export
+#   ```{r}
+#   #cs_raw_file <- cs_raw_file %>% 
+#     # Remove columns you don't need
+#   #  select(-c(EXAMPLE_FIELD)) %>% 
+#     # Rename columns to potentially use down the line
+#   #  rename(D_example = EXAMPLE_FIELD)
+#   ```
 
-- **What:** The below exports all your check tables to an excel file in
-  the folder path you set above
+# 5.2 Export ----
 
-- **Check:** n/a
+# - **What:** The below exports all your check tables to an excel file in
+#   the folder path you set above
 
-- **Project Action:** Optional - change the file name
+# - **Check:** n/a
 
-```{r}
+# - **Project Action:** Optional - change the file name
+
+# %% 5.2 Export
 # Create a new Excel workbook
 wb <- createWorkbook()
 
@@ -1290,9 +1359,9 @@ writeData(wb, sheet = "tchr_load", teacher_load_large)
 writeData(wb, sheet = "stu_course_cnt", student_course_count_small)
 #writeData(wb, sheet = "stud_subject_grade_cnt", student_course_count)
 
-```
 
-```{r}
+
+# %% Save the checks workbook locally first
 # Save the checks workbook locally first
 temp_file <- tempfile(fileext = ".xlsx")
 saveWorkbook(wb, temp_file, overwrite = TRUE)
@@ -1302,18 +1371,18 @@ file.exists(temp_file)
 # Upload to SharePoint using existing drive object
 internal_drive$upload_file(
   src = temp_file,
-  dest = paste0(raw_data_folder_path, "/checks_workbook.xlsx")
+  dest = paste0(raw_data_folder_path, "/2. Processed Data/checks_workbook.xlsx")
 )
-```
 
-```{r}
+
+# %% Save course schedule data for next script
 # Save course schedule data for next script
 ers_write_sharepoint(
   data = cs_raw_file,
   folder_path = raw_data_folder_path,
   file_name_with_extension = 
-    "/1.2 Data Imports & Exports from R/26-27 Course Schedule/01_course_data_post_validation.csv")
+    "/2. Processed Data/01_course_data_post_validation.csv")
 
-```
 
-Great job!!!
+
+# Great job!!!

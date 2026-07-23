@@ -1,3 +1,10 @@
 check_id,check_name,value,notes,status,updated_at
-1,Number of rows in data frame,2633836,Depends on number of students and number of course records you'd expect,Done,2026-07-20T17:53:06Z
-2,Number of students,48128,Should match what you'd expect from public data,Done,2026-07-20T17:53:50Z
+1,Number of rows in data frame,1048575,Depends on number of students and number of course records you'd expect,Done,2026-07-22T17:00:55Z
+2,Number of students,27855,Should match what you'd expect from public data,Done,2026-07-22T17:00:56Z
+3,Year of Data,1900-01-01 through 2024-07-26,Our year should align with expectations,Done,2026-07-22T17:01:04Z
+4,Unique count of teacher IDs,884,Compare to public data,Done,2026-07-22T17:01:08Z
+5,Unique count of student IDs,11272,Compare to public data,Done,2026-07-22T17:01:08Z
+6,Unique count of school names,11,Compare to public data,Done,2026-07-22T17:01:09Z
+7,Avg. rows per student by school,"Central High School: 28.7, Cody High School: 27.88, Denby High School: 28.77, EEVPA at Finney: 20.67, Henry Ford High School: 26.49, Mumford High School: 21.9, Northwestern: 28.75, Osborn High School: 30.35, Pershing High School: 29.9, Southeastern High School: 28.28, Western International HS: 31.79",Format: location_ID: ratio,Done,2026-07-22T17:01:09Z
+10,Check count of full duplicates,0,There should be no full duplicates,Done,2026-07-22T17:01:27Z
+11,Check count of records by period by school. What % are 1-8?,91.7,"There should be a similar # of records by period per school IF schools have a similar schedule (e.g., all have periods 1-8)",Done,2026-07-22T17:01:37Z
