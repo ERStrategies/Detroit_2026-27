@@ -101,19 +101,19 @@ course_data_unified <- ers_read_sharepoint(
 course_grades <- ers_read_sharepoint(
   folder_path = raw_data_folder_path,
   file_name_with_extension =
-    "/0. Raw Data/Stored Grades YE26 Q1-Q3 Update.xlsx")
+    "/0. Raw Data/Stored Grades YE26 - Corrected.csv")
 
 # Load newer course section data
-cs_raw_data <- ers_read_sharepoint(
-  folder_path = raw_data_folder_path,
-  file_name_with_extension =
-    "/0. Raw Data/course_sections_251103.csv")
+# cs_raw_data <- ers_read_sharepoint(
+#   folder_path = raw_data_folder_path,
+#   file_name_with_extension =
+#     "/0. Raw Data/course_sections_251103.csv")
 
 # Load course coding
 course_coding <- ers_read_sharepoint(
   folder_path = raw_data_folder_path,
   file_name_with_extension =
-    "/1. Coding/course_coding_2024.xlsx")
+    "/1. Coding/course_coding_2026.xlsx")
 
 # Load teacher licensure data
 # teacher_licensure <- ers_read_sharepoint(
@@ -123,14 +123,67 @@ course_coding <- ers_read_sharepoint(
 
 # May also need to load other data (e.g., HR data)
 
+# 1.2b Create synthetic student demographic flags ----
+# No student demographic data available; derive flags from course enrollments.
+# A student receives a flag if enrolled in *any* course with that flag set to 1.
 
-# 1.3 Pull in time per period ----
+# %% 1.2b Create synthetic student demographic flags
+# Rename course grade fields
+course_grades <- course_grades |>
+  rename(
+    D_stu_id                 = `DPSCD Masked Student Id`,
+    D_year_end               = `Year End`,
+    D_course_id              = `Course Number`,
+    D_course_name            = `Course Name`,
+    D_course_grade           = Grade,
+    D_store_code             = `Store Code`,
+    D_school_year            = `School Year`,
+    D_grade_scale_id         = `Grade Scale Id`,
+    D_eem_code               = `EEM Code`,
+    D_stu_grade              = `Grade Level`,
+    D_grade_outcome          = `Grade Outcome`,
+    D_gpa_points             = `GPA Points`,
+    D_gpa_points_added_value = `GPA Points Added Value`,
+    D_credits_earned         = `Credits Earned`,
+    D_potential_credits      = `Potential Credits`
+  )
 
-# What:
+# Create student demographics and add grade
+stu_demographics <- course_data_unified |>
+  group_by(D_stu_id) |>
+  summarise(
+    D_stu_ell_flag = as.integer(any(D_course_ell_flag == 1, na.rm = TRUE)),
+    D_stu_swd_flag = as.integer(any(D_course_swd_flag == 1, na.rm = TRUE)),
+    .groups = "drop"
+  ) |>
+  left_join(
+    course_grades |>
+      group_by(D_stu_id) |>
+      summarise(
+        D_stu_grade = if (all(is.na(D_stu_grade))) NA_real_ else max(D_stu_grade, na.rm = TRUE),
+        .groups = "drop"
+      ),
+    by = "D_stu_id"
+  )
 
-# Check:
+stu_demographics |>
+  group_by(D_stu_grade) |>
+  summarise(
+    count = n(),
+    unique_stu = n_distinct(D_stu_id))
 
-# Project Team Action:
+# %%
+# Merge grade level value back into course data unified
+course_data_unified <- course_data_unified |>
+  select(-D_stu_grade) |>
+  left_join(stu_demographics, by = "D_stu_id")
+
+# %% Filter out records without a known student grade level
+course_data_unified <- course_data_unified |>
+  filter(!is.na(D_stu_grade))
+
+course_data_unified |>
+  count(D_stu_grade)
 
 # %% 1.3 Pull in time per period
 # Create table with minutes per period by school based on bell schedule
@@ -1121,9 +1174,9 @@ teacher_rollup <- course_data_unified |>
            # D_position_type,
            # D_position_subtype,
            # D_job_title,
-           D_employee_license_type_rank, # Added for Springfield
-           D_employee_license_type, # Added for Springfield
-           D_employee_license_subject_concat, # Added for Springfield
+           # D_employee_license_type_rank, # Added for Springfield
+           # D_employee_license_type, # Added for Springfield
+           # D_employee_license_subject_concat, # Added for Springfield
            C_ninth_grade_teacher_flag,
            M_num_periods,
            M_teacher_utilization,
@@ -1131,8 +1184,8 @@ teacher_rollup <- course_data_unified |>
            M_teacher_load_bucket) |> 
   summarize(
     M_num_preps = n_distinct(C_course_name),
-    M_meetings_in_S1 = paste0(unique(D_meeting[D_term != 3502]), collapse = " | "),
-    C_teacher_course_names = paste0(unique(C_course_name), collapse = " | "),
+    # M_meetings_in_S1 = paste0(unique(D_meeting[D_term != 3502]), collapse = " | "),
+    # C_teacher_course_names = paste0(unique(C_course_name), collapse = " | "),
     M_teacher_weight = 1) |>
   arrange(
     desc(C_primary_location_name),
@@ -1160,8 +1213,8 @@ class_rollup <- class_rollup |>
         C_primary_location_name,
         C_primary_course_subject,
         C_primary_grade,
-        D_employee_license_type,
-        C_novice_teacher_indicator,
+        #D_employee_license_type,
+        #C_novice_teacher_indicator,
         M_num_periods,
         M_teacher_utilization,
         M_teacher_load,
@@ -1180,180 +1233,180 @@ class_rollup <- class_rollup |>
 
 # %% 4.1 Create student-level proficiency flags
 # Code column names
-course_grades <- course_grades %>% 
-  rename(
-    D_year = `School Year`,
-    D_location_name = `School Name`,
-    D_stu_id = `Student ID`,
-    D_stu_grade = `Grade Level`,
-    D_stu_cohort = `Graduation Cohort`,
-    D_course_subject = `Course Subject Area Description`,
-    D_course_name = `Course Description`,
-    D_course_category = `Course Category Description`,
-    D_stu_course_grade = F1
-  ) %>% 
-  select(
-    D_year,
-    D_location_name,
-    D_stu_id,
-    D_stu_grade,
-    D_stu_cohort,
-    D_course_name,
-    D_course_subject,
-    D_course_category,
-    D_stu_course_grade
-  )
+# course_grades <- course_grades %>% 
+#   rename(
+#     D_year = `School Year`,
+#     D_location_name = `School Name`,
+#     D_stu_id = `Student ID`,
+#     D_stu_grade = `Grade Level`,
+#     D_stu_cohort = `Graduation Cohort`,
+#     D_course_subject = `Course Subject Area Description`,
+#     D_course_name = `Course Description`,
+#     D_course_category = `Course Category Description`,
+#     D_stu_course_grade = F1
+#   ) %>% 
+#   select(
+#     D_year,
+#     D_location_name,
+#     D_stu_id,
+#     D_stu_grade,
+#     D_stu_cohort,
+#     D_course_name,
+#     D_course_subject,
+#     D_course_category,
+#     D_stu_course_grade
+#   )
 
-# Check course categories
-course_grades %>% 
-  group_by(D_location_name,
-           D_course_category) %>% 
-  summarise(count = n())
+# # Check course categories
+# course_grades %>% 
+#   group_by(D_location_name,
+#            D_course_category) %>% 
+#   summarise(count = n())
 
-# Code by category
-course_grades <- course_grades %>% 
-  mutate(
-    D_course_credit_recovery = if_else(
-      D_course_category %in% c("Credit Recovery", "SUM Summer School", "VHS"),
-      1,
-      0))
+# # Code by category
+# course_grades <- course_grades %>% 
+#   mutate(
+#     D_course_credit_recovery = if_else(
+#       D_course_category %in% c("Credit Recovery", "SUM Summer School", "VHS"),
+#       1,
+#       0))
 
 # Create student level table by subject
 
 
 # %% 4.1 Create student-level proficiency flags (2)
 # Prep course coding data for merge
-course_coding_merge <- course_coding %>% 
-  group_by(
-    D_course_name,
-    C_course_subject,
-    C_course_credit_type) %>% 
-  summarise(count = n())
+# course_coding_merge <- course_coding %>% 
+#   group_by(
+#     D_course_name,
+#     C_course_subject,
+#     C_course_credit_type) %>% 
+#   summarise(count = n())
 
-# Merge into course grade data
-course_grades <- course_grades %>% 
-  left_join(course_coding_merge,
-            by = "D_course_name")
+# # Merge into course grade data
+# course_grades <- course_grades %>% 
+#   left_join(course_coding_merge,
+#             by = "D_course_name")
 
-# Create filtered course_grades_rollup
-course_grades_rollup <- course_grades |> 
-  filter(
-    D_course_category != "TRN Transfer",
-    D_course_credit_recovery == 0,
-    !is.na(D_stu_course_grade),
-    !is.na(D_stu_id)
-  ) |> 
-    mutate(
-    C_stu_course_grade = str_extract(D_stu_course_grade, "^[A-F]"))
+# # Create filtered course_grades_rollup
+# course_grades_rollup <- course_grades |> 
+#   filter(
+#     D_course_category != "TRN Transfer",
+#     D_course_credit_recovery == 0,
+#     !is.na(D_stu_course_grade),
+#     !is.na(D_stu_id)
+#   ) |> 
+#     mutate(
+#     C_stu_course_grade = str_extract(D_stu_course_grade, "^[A-F]"))
 
 
 # %% 4.1 Create student-level proficiency flags (3)
 # Create a table of just graduation required core courses
-course_grades_core <- course_grades |>
-  filter(
-    C_course_credit_type == "Graduation Required",
-    D_course_subject %in% c("English", "Math", "Science", "Social Studies"),
-    D_course_category != "TRN Transfer",
-    D_course_credit_recovery == 0,
-    !is.na(D_stu_course_grade),
-    !is.na(D_stu_id)
-  ) |>
-  mutate(
-    C_course_grade_letter = str_extract(D_stu_course_grade, "^[A-F]"),
-    C_course_grade_rank = case_when(
-      C_course_grade_letter == "A" ~ 1,
-      C_course_grade_letter == "B" ~ 2,
-      C_course_grade_letter == "C" ~ 3,
-      C_course_grade_letter == "D" ~ 4,
-      C_course_grade_letter == "F" ~ 5,
-      TRUE ~ NA_real_
-    ),
-    C_course_subject_name = D_course_subject |>
-      str_to_lower() |>
-      str_replace_all(" ", "_")
-  ) |>
-  filter(!is.na(C_course_grade_rank)) |>
-  group_by(
-    D_location_name,
-    D_stu_id,
-    D_stu_grade,
-    D_stu_cohort,
-    C_course_subject_name
-  ) |>
-  summarise(
-    C_core_grad_required_grade_rank = max(
-      C_course_grade_rank,
-      na.rm = TRUE
-    ),
-    .groups = "drop"
-  ) |>
-  pivot_wider(
-    id_cols = c(
-      D_location_name,
-      D_stu_id,
-      D_stu_grade,
-      D_stu_cohort
-    ),
-    names_from = C_course_subject_name,
-    values_from = C_core_grad_required_grade_rank,
-    names_glue = "C_course_grade_{C_course_subject_name}"
-  )
+# course_grades_core <- course_grades |>
+#   filter(
+#     C_course_credit_type == "Graduation Required",
+#     D_course_subject %in% c("English", "Math", "Science", "Social Studies"),
+#     D_course_category != "TRN Transfer",
+#     D_course_credit_recovery == 0,
+#     !is.na(D_stu_course_grade),
+#     !is.na(D_stu_id)
+#   ) |>
+#   mutate(
+#     C_course_grade_letter = str_extract(D_stu_course_grade, "^[A-F]"),
+#     C_course_grade_rank = case_when(
+#       C_course_grade_letter == "A" ~ 1,
+#       C_course_grade_letter == "B" ~ 2,
+#       C_course_grade_letter == "C" ~ 3,
+#       C_course_grade_letter == "D" ~ 4,
+#       C_course_grade_letter == "F" ~ 5,
+#       TRUE ~ NA_real_
+#     ),
+#     C_course_subject_name = D_course_subject |>
+#       str_to_lower() |>
+#       str_replace_all(" ", "_")
+#   ) |>
+#   filter(!is.na(C_course_grade_rank)) |>
+#   group_by(
+#     D_location_name,
+#     D_stu_id,
+#     D_stu_grade,
+#     D_stu_cohort,
+#     C_course_subject_name
+#   ) |>
+#   summarise(
+#     C_core_grad_required_grade_rank = max(
+#       C_course_grade_rank,
+#       na.rm = TRUE
+#     ),
+#     .groups = "drop"
+#   ) |>
+#   pivot_wider(
+#     id_cols = c(
+#       D_location_name,
+#       D_stu_id,
+#       D_stu_grade,
+#       D_stu_cohort
+#     ),
+#     names_from = C_course_subject_name,
+#     values_from = C_core_grad_required_grade_rank,
+#     names_glue = "C_course_grade_{C_course_subject_name}"
+#   )
 
 
-# %% 4.1 Create student-level proficiency flags (4)
-# Select columns to merge back into main data set
-course_grades_core <- course_grades_core |> 
-  mutate(
-        C_proficiency_ela = case_when(
-        C_course_grade_english <= 3 ~ "Proficient",
-        C_course_grade_english >= 4 ~ "Below Proficient",
-        TRUE ~ NA_character_
-      ),
-      C_proficiency_math = case_when(
-        C_course_grade_math <= 3 ~ "Proficient",
-        C_course_grade_math >= 4 ~ "Below Proficient",
-        TRUE ~ NA_character_
-      ),
-      C_proficiency = case_when(
-        C_proficiency_ela == "Below Proficient" &
-        C_proficiency_math == "Below Proficient" ~ "Below Proficient",
+# # %% 4.1 Create student-level proficiency flags (4)
+# # Select columns to merge back into main data set
+# course_grades_core <- course_grades_core |> 
+#   mutate(
+#         C_proficiency_ela = case_when(
+#         C_course_grade_english <= 3 ~ "Proficient",
+#         C_course_grade_english >= 4 ~ "Below Proficient",
+#         TRUE ~ NA_character_
+#       ),
+#       C_proficiency_math = case_when(
+#         C_course_grade_math <= 3 ~ "Proficient",
+#         C_course_grade_math >= 4 ~ "Below Proficient",
+#         TRUE ~ NA_character_
+#       ),
+#       C_proficiency = case_when(
+#         C_proficiency_ela == "Below Proficient" &
+#         C_proficiency_math == "Below Proficient" ~ "Below Proficient",
   
-        C_proficiency_ela == "Below Proficient" &
-        C_proficiency_math == "Proficient" ~ "Partially Proficient",
+#         C_proficiency_ela == "Below Proficient" &
+#         C_proficiency_math == "Proficient" ~ "Partially Proficient",
   
-        C_proficiency_ela == "Proficient" &
-        C_proficiency_math == "Below Proficient" ~ "Partially Proficient",
+#         C_proficiency_ela == "Proficient" &
+#         C_proficiency_math == "Below Proficient" ~ "Partially Proficient",
   
-        C_proficiency_ela == "Below Proficient" &
-        is.na(C_proficiency_math) ~ "Below Proficient",
+#         C_proficiency_ela == "Below Proficient" &
+#         is.na(C_proficiency_math) ~ "Below Proficient",
 
-        C_proficiency_ela == "Proficient" &
-        is.na(C_proficiency_math) ~ "Proficient",
+#         C_proficiency_ela == "Proficient" &
+#         is.na(C_proficiency_math) ~ "Proficient",
   
-        is.na(C_proficiency_ela) &
-        C_proficiency_math == "Below Proficient" ~ "Below Proficient",
+#         is.na(C_proficiency_ela) &
+#         C_proficiency_math == "Below Proficient" ~ "Below Proficient",
 
-        is.na(C_proficiency_ela) &
-        C_proficiency_math == "Proficient" ~ "Proficient",
+#         is.na(C_proficiency_ela) &
+#         C_proficiency_math == "Proficient" ~ "Proficient",
   
-        C_proficiency_ela == "Proficient" &
-        C_proficiency_math == "Proficient" ~ "Proficient",
-        TRUE ~ NA_character_
-)
-    ) |> 
-      select(
-        D_stu_id,
-        C_proficiency_ela,
-        C_proficiency_math,
-        C_proficiency
-      )
+#         C_proficiency_ela == "Proficient" &
+#         C_proficiency_math == "Proficient" ~ "Proficient",
+#         TRUE ~ NA_character_
+# )
+#     ) |> 
+#       select(
+#         D_stu_id,
+#         C_proficiency_ela,
+#         C_proficiency_math,
+#         C_proficiency
+#       )
 
-# Merge course grade data back into main data set
-course_data_unified <- course_data_unified |> 
-  left_join(
-    course_grades_core,
-    by = "D_stu_id"
-    )
+# # Merge course grade data back into main data set
+# course_data_unified <- course_data_unified |> 
+#   left_join(
+#     course_grades_core,
+#     by = "D_stu_id"
+#     )
 
 
 # 4.2 Create student-level demographic flags ----
@@ -1425,16 +1478,17 @@ student_rollup <- course_data_unified |>
            C_course_subject_area,
            C_course_credit_type,
            C_course_intervention,
-           D_minutes_attended,
+           #D_minutes_attended,
            M_pct_ell,
            M_pct_swd,
            M_class_weight,
            M_num_stu,
            M_class_size,
            C_class_size_bucket,
-           C_proficiency_ela,
-           C_proficiency_math,
-           C_proficiency) %>% 
+           #C_proficiency_ela,
+           #C_proficiency_math,
+           #C_proficiency
+          ) %>% 
   summarise(class_row = 1) |> 
   select(-class_row)
 
@@ -1455,25 +1509,25 @@ ers_write_sharepoint(
   data = class_rollup,
   folder_path = raw_data_folder_path,
   file_name_with_extension = 
-    "/Processed Data/08_class_rollup.xlsx")
+    "/2. Processed Data/08_class_rollup.xlsx")
 
 # Save teacher data for next script
 ers_write_sharepoint(
   data = teacher_rollup,
   folder_path = raw_data_folder_path,
   file_name_with_extension = 
-    "/Processed Data/08_teacher_rollup.xlsx")
+    "/2. Processed Data/08_teacher_rollup.xlsx")
 
 # Save student data for next script
 ers_write_sharepoint(
   data = student_rollup,
   folder_path = raw_data_folder_path,
   file_name_with_extension = 
-    "/Processed Data/08_student_rollup.xlsx")
+    "/2. Processed Data/08_student_rollup.xlsx")
 
 # Save course grades data for next script
 ers_write_sharepoint(
   data = course_grades_rollup,
   folder_path = raw_data_folder_path,
   file_name_with_extension = 
-    "/Processed Data/08_course_grades_rollup.xlsx")
+    "/2. Processed Data/08_course_grades_rollup.xlsx")

@@ -1,0 +1,25 @@
+{
+  "files.watcherExclude": {
+    "**/.data_cache/**": true,
+    "**/renv/library/**": true,
+    "**/.git/objects/**": true,
+    "**/.quarto/**": true,
+    "**/_freeze/**": true,
+    "**/_site/**": true,
+    "**/data/**": true,
+    "**/output/**": true,
+    "**/outputs/**": true
+  },
+  "search.exclude": {
+    "**/.data_cache/**": true,
+    "**/renv/library/**": true,
+    "**/.git/objects/**": true,
+    "**/.quarto/**": true,
+    "**/_freeze/**": true,
+    "**/_site/**": true,
+    "**/data/**": true,
+    "**/output/**": true,
+    "**/outputs/**": true
+  },
+  "git.autofetch": false
+}

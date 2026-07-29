@@ -1167,8 +1167,7 @@ course_data_flagged <- course_data_flagged |>
     D_employee_id,
 
     # Course / section fields
-    D_ccid,
-    D_users_dcid,
+    D_ccid, # Detroit
     D_course_id,
     D_course_name,
     C_course_name,
@@ -1183,10 +1182,10 @@ course_data_flagged <- course_data_flagged |>
 
     # ERS course coding fields
     C_location_type,
-    C_stu_snapshot,
-    C_sced_code,
-    C_sced_subject_code,
-    C_sced_subject_name,
+    #C_stu_snapshot,
+    C_sced_code, # Detroit
+    C_sced_subject_code, # Detroit
+    C_sced_subject_name, # Detroit
     C_course_time,
     C_course_subject_area,
     C_course_subject,
@@ -1202,9 +1201,9 @@ course_data_flagged <- course_data_flagged |>
     C_time_metric,
     C_course_time_exclude,
     C_class_size_and_teacher_load_exclude,
-    C_teacher_load_metric_lgl,
-    C_class_size_metric_lgl,
-    C_time_metric_lgl,
+    #C_teacher_load_metric_lgl,
+    #C_class_size_metric_lgl,
+    #C_time_metric_lgl,
 
     # Class IDs
     C_class_id_original,
@@ -1267,9 +1266,6 @@ course_data_flagged <- course_data_flagged |>
     C_class_id_post_teachers,
     C_class_id
   )
-
-
-# Export to SharePoint
 
 # %% 1. Trim and export data (2)
 # Save course schedule data for next script

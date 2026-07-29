@@ -119,7 +119,7 @@ raw_data_folder_path <- "District Partners/Detroit Public Schools/26-27 HS Redes
 cs_data <- ers_read_sharepoint(
   folder_path = raw_data_folder_path,
   file_name_with_extension =
-    "/2. Processed Data/02_course_data_post_standardization.csv")
+    "/2. Processed Data/01_course_data_post_validation.csv")
 
 
 # ==============================================================================
@@ -140,8 +140,11 @@ cs_data <- ers_read_sharepoint(
 
 # %% 2.1 Coding Tables
 # Step 1: create coding table with course coding data provided by the district (i.e., "D_" columns)
-cs_coding_data <- cs_data %>%
-  group_by(D_course_name) %>%
+cs_coding_data <- cs_data |>
+  group_by(
+    D_course_name,
+    D_course_id,
+    D_sced_subject_code) |>
 #           D_course_subject,
 #           D_course_subject_desc,
 #           D_course_ell_flag,
@@ -310,7 +313,7 @@ expression_check_courses <- expression_check %>%
 cs_course_coding <- ers_read_sharepoint(
   folder_path = raw_data_folder_path,
   file_name_with_extension =
-    "/1. Coding/course_coding_2024.xlsx")
+    "/1. Coding/course_coding_2026.xlsx")
 
 term_weight_coded <- ers_read_sharepoint(
   folder_path = raw_data_folder_path,
@@ -455,7 +458,7 @@ cs_data <- cs_data %>%
 # %% 3.3 Calculate the Class Weight [3]
 # Check summary table of distribution of class weight and expression weight
 cs_data |>
-  group_by(C_stu_snapshot, M_class_weight) |>
+  group_by(M_class_weight) |>
   summarise(count = n())
 
 # cs_data |>
@@ -464,10 +467,13 @@ cs_data |>
 
 # Check included with weight 0 - Detroit: all virtual Edgenuity afterschool
 check_weight <- cs_data |>
-  filter(
-    C_stu_snapshot == "Include",
-    M_class_weight == 0
-  )
+  filter(M_class_weight == 0) |>
+  group_by(
+    C_course_name,
+    D_period,
+    D_rotation
+  ) |>
+  summarise(count = n())
 
 # ==============================================================================
 # Part IV: Calculate Exclusions ----
@@ -868,6 +874,7 @@ max(cs_data$H_row_id_before_explosions)
 # ==============================================================================
 # Part VII: IF YOU DON'T NEED TO EXPLODE DATA ----
 # ==============================================================================
+# %%
 cs_data <- cs_data %>% 
  mutate(C_term_weight_exploded = C_term_weight,
         C_term_exploded = D_term)

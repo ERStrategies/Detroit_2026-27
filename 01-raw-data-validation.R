@@ -263,8 +263,8 @@ update_check <- function(check_id_value,
     updated_at = now()
   )
   
-  checks_table <- checks_table %>%
-    filter(check_id != as.character(check_id_value)) %>%
+  checks_table <- checks_table |>
+    filter(check_id != as.character(check_id_value)) |>
     bind_rows(new_row)
   
   write_csv(checks_table, file_path)
@@ -475,10 +475,10 @@ expression_check <- cs_raw_file |>
 update_check(
      check_id = 3,
      check_name = "Missing Columns in Data Frame", 
-     value = (cs_raw_file %>%
-      select(where(is.character)) %>%
-      select_if(~ any(. == "MISSING")) %>%
-      colnames() %>%
+     value = (cs_raw_file |>
+      select(where(is.character)) |>
+      select_if(~ any(. == "MISSING")) |>
+      colnames() |>
       paste0(collapse = ", ")),
      notes = "There should be no critical fields missing",
      status = "In Progress" # Update status if it has changed. Do not change any other values
@@ -505,7 +505,7 @@ get_checks_table()
 #  mutate(D_course_section = as.character(D_course_section))
 
 # Remove blank perriod and cycle day ID columns
-#cs_raw_file <- cs_raw_file %>%
+#cs_raw_file <- cs_raw_file |>
 #  select(-CYCLE_DAY_ID, -Period)
 
 
@@ -522,7 +522,7 @@ get_checks_table()
 #  mutate(across(where(is.numeric), ~ if (all(. %% 1 == 0, na.rm = TRUE)) as.integer(.) else .))
 
 # Update column names in student demographic file
-#stu_demographics <- stu_demographics %>% 
+#stu_demographics <- stu_demographics |> 
 #  rename(D_stu_id = Stu_ID,
 #         D_stu_grade = `Current Grade Level ID`,
 #         D_location_id = `SIS School ID`,
@@ -531,10 +531,10 @@ get_checks_table()
 #         D_stu_poverty_flag = `Stu_Poverty Flag`)
 
 # Check that student demographics file has only one row per stu_id
-#stu_demographics %>% 
-#  group_by(D_stu_id) %>% 
-#  summarise(count = n()) %>% 
-#  group_by(count) %>% 
+#stu_demographics |> 
+#  group_by(D_stu_id) |> 
+#  summarise(count = n()) |> 
+#  group_by(count) |> 
 #  summarise(count_sum = sum(count),
 #            stu_count = n_distinct(D_stu_id))
 
@@ -550,42 +550,53 @@ get_checks_table()
 #  select(D_stu_id, D_stu_grade, D_stu_swd_flag, D_stu_ell_flag, D_stu_poverty_flag)
 
 # Remove placeholder columns, then merge
-#cs_raw_file <- cs_raw_file %>%
+#cs_raw_file <- cs_raw_file |>
 #  select(-D_stu_grade,
 #         -D_stu_swd_flag,
 #         -D_stu_ell_flag,
-#         -D_stu_poverty_flag) %>%
+#         -D_stu_poverty_flag) |>
 #  left_join(stu_demographics,
 #            by = "D_stu_id")
 
 
 
 # %%
-# Detroit: filter for rows with D_location_name (other rows are for elementary and middle schools)
+# Detroit: convert location_id into an integer before the merge
 cs_raw_file <- cs_raw_file |>
-  filter(!is.na(D_location_name))
-
+  mutate(
+    D_location_id = as.integer(D_location_id),
+    D_course_id_suffix = substr(D_course_id, nchar(D_course_id) - 1, nchar(D_course_id))
+  )
 
 # %%
 # Merge in flag from location_coded: if C_eem_code is in location_coded, create new column C_location_type = "Neighborhood School", else "Non-Neighborhood School"
 cs_raw_file <- cs_raw_file |>
+  select(-D_location_name) |>
   left_join(
     location_coded,
-    by = c(
-      "D_location_name",
-      "D_location_id"
-  )
-)
+    by = "D_location_id")
 
 # Filter out data from non-neighborhood schools
 cs_raw_file <- cs_raw_file |>
   filter(!is.na(C_location_type))
 
 # %%
+# Check distribution of D_course_id_suffix
+suffix_check <- cs_raw_file |>
+  filter(D_course_id_suffix != "S1" & D_course_id_suffix != "S2") |>
+  group_by(
+    D_course_id_suffix,
+    D_course_name) |>
+      summarise (count = n()) |> 
+      arrange(desc(count))
+
+# %%
 # Update D_term based on course name
 cs_raw_file <- cs_raw_file |>
   mutate(
     D_term = case_when(
+      D_course_id_suffix == "S1" ~ "S1",
+      D_course_id_suffix == "S2" ~ "S2",
       str_detect(D_course_name, "-\\s*A\\s*\\*?\\s*$") ~ "S1",
       str_detect(D_course_name, "-\\s*B\\s*\\*?\\s*$") ~ "S2",
       TRUE ~ "FY"
@@ -634,10 +645,10 @@ check_tpr <- cs_raw_file |>
 update_check(
      check_id = 3,
      check_name = "Missing Columns in Data Frame", 
-     value = (cs_raw_file %>%
-      select(where(is.character)) %>%
-      select_if(~ any(. == "MISSING")) %>%
-      colnames() %>%
+     value = (cs_raw_file |>
+      select(where(is.character)) |>
+      select_if(~ any(. == "MISSING")) |>
+      colnames() |>
       paste0(collapse = ", ")),
      notes = "There should be no critical fields missing",
      status = "In Progress" # Update status if it has changed. Do not change any other values
@@ -663,8 +674,8 @@ get_checks_table()
 
 # %% 3.1 What year(s) of data do we have?
 # Update the Date columns from character to date 
-cs_raw_file <- cs_raw_file %>% mutate(D_stu_exit_date = mdy(D_stu_exit_date))
-cs_raw_file <- cs_raw_file %>% mutate(D_stu_enter_date = mdy(D_stu_enter_date))
+#cs_raw_file <- cs_raw_file |> mutate(D_stu_exit_date = mdy(D_stu_exit_date))
+#cs_raw_file <- cs_raw_file |> mutate(D_stu_enter_date = mdy(D_stu_enter_date))
 
 # Now get the max and min dates
 max_date <- max(cs_raw_file$D_stu_enter_date, na.rm = TRUE)
@@ -684,6 +695,57 @@ checks_table <- get_checks_table()
 get_checks_table()
 
 
+# %% 2.4 Create Student Snapshot Dates
+# #check
+cs_raw_file |>
+   group_by(D_term,
+            D_stu_enter_date) |>
+   count() |>
+   arrange(desc(D_stu_enter_date))
+
+# #check
+cs_raw_file |>
+   group_by(D_term,
+            D_stu_exit_date) |>
+   count() |>
+   arrange(desc(D_stu_exit_date))
+
+
+# %%
+
+# creating snapshot variable
+# cs_raw_file <- cs_raw_file |>
+#    mutate(C_stu_snapshot = case_when(
+#           D_term == "FY" &
+#           D_stu_enter_date <= as.Date("2025-08-25") &
+#           D_stu_exit_date >= as.Date("2025-08-25") ~ "Include",      
+#           D_term == "S1" &
+#           D_stu_enter_date <= as.Date("2025-10-25") &
+#           D_stu_exit_date >= as.Date("2025-10-25") ~ "Include",
+#           D_term == "S1" &
+#           D_stu_enter_date <= as.Date("2026-01-17") &
+#           D_stu_exit_date >= as.Date("2026-01-17") ~ "Include",
+#           D_term == "S2" &
+#           D_stu_enter_date <= as.Date("2026-03-28") &
+#           D_stu_exit_date >= as.Date("2026-03-28") ~ "Include",
+#           D_term == "S2" &
+#           D_stu_enter_date <= as.Date("2026-06-06") &
+#           D_stu_exit_date >= as.Date("2026-06-06") ~ "Include",
+#           TRUE ~ "Exclude"))
+
+# # check
+# cs_raw_file |>
+#    group_by(D_term, C_stu_snapshot) |>
+#    summarize(count_rows = length(D_term)) |>
+#    group_by(D_term) |>
+#    mutate(total_rows = sum(count_rows),
+#           percentage = round(count_rows / total_rows, 2))
+
+# # Check all records for one random student
+# student_check <- cs_raw_file |>
+#   filter(D_stu_id == sample(unique(D_stu_id), 1)) |>
+#   select(D_stu_id, D_employee_id, D_term, D_course_id, D_course_name, D_stu_enter_date, D_stu_exit_date, C_stu_snapshot) |>
+#   arrange(C_stu_snapshot, D_course_name)
 
 # 3.2 Missing & Unique values ----
 
@@ -697,7 +759,7 @@ get_checks_table()
 
 # %% a. Update Blanks or NULL to NA
 # Update blanks or NULL to NA
-cs_raw_file <- cs_raw_file %>%
+cs_raw_file <- cs_raw_file |>
   mutate(across(everything(), ~if_else(. %in% c("", NULL), NA, .)))
 
 
@@ -715,95 +777,155 @@ cs_raw_file <- cs_raw_file %>%
 
 # %% b. Review data with blanks or NAs
 # Create new data frame with column information
-col_info <-  data.frame(
+# %% b. Review data with blanks or NAs
+# Helper functions: treat NA, "", and whitespace as missing
+is_blank <- function(x) {
+  if (is.character(x) || is.factor(x)) {
+    !is.na(x) & trimws(as.character(x)) == ""
+  } else {
+    rep(FALSE, length(x))
+  }
+}
+
+is_missing <- function(x) {
+  is.na(x) | is_blank(x)
+}
+
+n_unique_nonmissing <- function(x) {
+  dplyr::n_distinct(x[!is_missing(x)])
+}
+
+# Create column-level data quality table
+col_info <- tibble(
   Column_Name = names(cs_raw_file),
-  Data_Type = sapply(cs_raw_file, class),
-  Count_Rows = sapply(cs_raw_file, function(x) length(na.omit(x))),
-  NA_Rows = sapply(cs_raw_file, function(x) sum(is.na(x))),
-  Unique_Rows = sapply(cs_raw_file, function(x) length(unique(na.omit(x)))),
-  stringsAsFactors = FALSE,
-  row.names= NULL
-)
+  Data_Type = vapply(
+    cs_raw_file,
+    \(x) paste(class(x), collapse = ", "),
+    character(1)
+  ),
+  Total_Rows = nrow(cs_raw_file),
+  NA_Rows = vapply(
+    cs_raw_file,
+    \(x) sum(is.na(x)),
+    numeric(1)
+  ),
+  Blank_Rows = vapply(
+    cs_raw_file,
+    \(x) sum(is_blank(x)),
+    numeric(1)
+  ),
+  Missing_Rows = vapply(
+    cs_raw_file,
+    \(x) sum(is_missing(x)),
+    numeric(1)
+  ),
+  Unique_Nonmissing = vapply(
+    cs_raw_file,
+    n_unique_nonmissing,
+    numeric(1)
+  )
+) |>
+  mutate(
+    Nonmissing_Rows = Total_Rows - Missing_Rows,
+    Percent_Missing = if_else(
+      Total_Rows == 0,
+      NA_real_,
+      round(Missing_Rows / Total_Rows * 100, 1)
+    )
+  ) |>
+  select(
+    Column_Name,
+    Data_Type,
+    Total_Rows,
+    Nonmissing_Rows,
+    NA_Rows,
+    Blank_Rows,
+    Missing_Rows,
+    Percent_Missing,
+    Unique_Nonmissing
+  ) |>
+  arrange(desc(Percent_Missing), Column_Name)
 
-# Calc % missing
-col_info <- col_info %>%
-            mutate(Percent_NA = NA_Rows / Count_Rows * 100)
-
-# Print new data frame
 col_info
 
-# Add primary keys to data checks table (employee, teacher, school)
-# Teachers
+# Unique teacher IDs
 update_check(
-     check_id = 4,
-     check_name = "Unique count of teacher IDs", 
-     value = cs_raw_file %>% pull(D_employee_id) %>% unique %>% length(),
-     notes = "Compare to public data",
-     status = "Done" 
-) %>% head
-get_checks_table() #print a record of all the most recent checks
+  check_id = 4,
+  check_name = "Unique count of teacher IDs",
+  value = n_unique_nonmissing(cs_raw_file$D_employee_id),
+  notes = "Excludes NA and blank values; compare to public data",
+  status = "Done"
+)
 
-# Students
+# Unique student IDs
 update_check(
-     check_id = 5,
-     check_name = "Unique count of student IDs", 
-     value = cs_raw_file %>% pull(D_stu_id) %>% unique %>% length(),
-     notes = "Compare to public data",
-     status = "Done" 
-) %>% head
-get_checks_table() #print a record of all the most recent checks
+  check_id = 5,
+  check_name = "Unique count of student IDs",
+  value = n_unique_nonmissing(cs_raw_file$D_stu_id),
+  notes = "Excludes NA and blank values; compare to public data",
+  status = "Done"
+)
 
-# Schools (LK: changed from ID to name)
+# Unique school names
 update_check(
-     check_id = 6,
-     check_name = "Unique count of school names", 
-     value = cs_raw_file %>% pull(D_location_name) %>% unique %>% length(),
-     notes = "Compare to public data",
-     status = "Done" 
-) %>% head
-get_checks_table() #print a record of all the most recent checks
+  check_id = 6,
+  check_name = "Unique count of school names",
+  value = n_unique_nonmissing(cs_raw_file$D_location_name),
+  notes = "Excludes NA and blank values; compare to public data",
+  status = "Done"
+)
 
-# Ratio of rows per student at each school (LK: changed from ID to name)
+# Average rows per student by school
 location_ratios <- cs_raw_file |>
+  filter(
+    !is_missing(D_location_name),
+    !is_missing(D_stu_id)
+  ) |>
   group_by(D_location_name) |>
-  summarize(
+  summarise(
     n_rows = n(),
     n_students = n_distinct(D_stu_id),
     ratio = n_rows / n_students,
     .groups = "drop"
   ) |>
+  arrange(D_location_name) |>
   mutate(
-    ratio_str = paste0(D_location_name, ": ", round(ratio, 2))
+    ratio_str = paste0(
+      D_location_name,
+      ": ",
+      round(ratio, 2)
+    )
   )
 
-value_str <- paste(location_ratios$ratio_str, collapse = ", ")
+value_str <- if (nrow(location_ratios) == 0) {
+  "No valid school/student records"
+} else {
+  paste(location_ratios$ratio_str, collapse = ", ")
+}
 
 update_check(
   check_id = 7,
   check_name = "Avg. rows per student by school",
   value = value_str,
-  notes = "Format: location_ID: ratio",
+  notes = "Format: school name: average rows per student",
   status = "Done"
-) %>% head
-get_checks_table() #print a record of all the most recent checks
+)
 
+# Save and display the latest checks table
 checks_table <- get_checks_table()
-get_checks_table()
-View(col_info)
-
-
+checks_table
 
 # %% Check rows that have any NAs to see if these are records we should keep or remove
 # Check rows that have any NAs to see if these are records we should keep or remove
 # Identify columns with NA values
-cols_with_na <- col_info %>%
-  filter(NA_Rows > 0) %>%
+cols_with_na <- col_info |>
+  filter(NA_Rows > 0) |>
   pull(Column_Name)
 
 # Create NA summary by course
-na_summary_by_course <- cs_raw_file %>%
-  select(D_course_name, all_of(cols_with_na)) %>%
-  group_by(D_course_name) %>%
+na_summary_by_course <- cs_raw_file |>
+  select(D_course_name, all_of(cols_with_na)) |>
+  group_by(D_course_name) |>
   summarise(
     
     # Total rows for the course
@@ -820,8 +942,8 @@ na_summary_by_course <- cs_raw_file %>%
     ),
     
     .groups = "drop"
-  ) %>%
-  filter(rows_with_any_na > 0) %>%
+  ) |>
+  filter(rows_with_any_na > 0) |>
   arrange(desc(rows_with_any_na), D_course_name)
 
 
@@ -839,10 +961,10 @@ na_summary_by_course <- cs_raw_file %>%
 
 # %% c. Remove records for students without demographic data
 # Count unique students with NA in any demographic column
-n_students_na_demog <- cs_raw_file %>%
-  filter(if_any(all_of(names(stu_demographics)), is.na)) %>%
-  pull(D_stu_id) %>%
-  unique() %>%
+n_students_na_demog <- cs_raw_file |>
+  filter(if_any(all_of(names(stu_demographics)), is.na)) |>
+  pull(D_stu_id) |>
+  unique() |>
   length()
 
 # Add to checks table
@@ -852,7 +974,7 @@ update_check(
   value = n_students_na_demog,
   notes = "Count of unique students with NA in any demographic column",
   status = "In Progress"
-) %>% head
+) |> head
 get_checks_table() #print a record of all the most recent checks
 
 checks_table <- get_checks_table()
@@ -861,7 +983,7 @@ checks_table <- get_checks_table()
 
 # %% Filter out records with missing student demographic data
 # Filter out records with missing student demographic data
-cs_raw_file <- cs_raw_file %>%
+cs_raw_file <- cs_raw_file |>
   filter(if_all(all_of(names(stu_demographics)), ~ !is.na(.)))
 
 # Update checks table
@@ -871,17 +993,17 @@ update_check(
   value = n_students_na_demog,
   notes = "Count of unique students with NA in any demographic column",
   status = "Done"
-) %>% head
+) |> head
 get_checks_table() #print a record of all the most recent checks
 
 # Students
 update_check(
      check_id = 9,
      check_name = "Final unique count of student IDs", 
-     value = cs_raw_file %>% pull(D_stu_id) %>% unique %>% length(),
+     value = cs_raw_file |> pull(D_stu_id) |> unique() |> length(),
      notes = "Compare to public data",
      status = "Done" 
-) %>% head
+) |> head
 get_checks_table() #print a record of all the most recent checks
 
 checks_table <- get_checks_table()
@@ -899,19 +1021,19 @@ checks_table <- get_checks_table()
 
 # %% a. Review Duplicates Table
 #View duplicates
-dups_cs_raw_file <- cs_raw_file %>%
-  group_by_all() %>%
- mutate(n = n()) %>%
+dups_cs_raw_file <- cs_raw_file |>
+  group_by_all() |>
+ mutate(n = n()) |>
     filter(n>1)
 
 #add nrows to checks table
 update_check(
      check_id = 10,
      check_name = "Check count of full duplicates", 
-     value = dups_cs_raw_file %>% nrow(),
+     value = dups_cs_raw_file |> nrow(),
      notes = "There should be no full duplicates",
      status = "Initial check" #Update status if it has changed. Do not change any other values
-) %>% head
+) |> head
 get_checks_table() #print a record of all the most recent checks
 
 checks_table <- get_checks_table()
@@ -933,10 +1055,10 @@ cs_raw_file <- cs_raw_file[!duplicated(cs_raw_file), ]
 update_check(
      check_id = 10,
      check_name = "Check count of full duplicates", 
-     value = cs_raw_file[duplicated(cs_raw_file,by = NULL),] %>% nrow,
+     value = cs_raw_file[duplicated(cs_raw_file,by = NULL),] |> nrow,
      notes = "There should be no full duplicates",
      status = "Done" # Update status if it has changed. Do not change any other values
-) %>% head
+) |> head
 get_checks_table() # Print a record of all the most recent checks
 
 # ------------
@@ -954,30 +1076,30 @@ get_checks_table() # Print a record of all the most recent checks
 
 # %% 3.4 Count of Periods at each school
 # View count of records by D_term/school
-count_periods_by_school <- cs_raw_file %>%
-  filter(complete.cases(`D_period`)) %>%
-  group_by(D_location_name, `D_period`) %>% 
-  count(sort = TRUE) %>%
-  arrange(D_location_name, D_period) %>%
-  group_by(D_location_name) %>% 
-  mutate(perc_periods_at_school = round(100*n/sum(n),1)) %>%
-  select(D_location_name,`D_period`,perc_periods_at_school)%>%
+count_periods_by_school <- cs_raw_file |>
+  filter(complete.cases(`D_period`)) |>
+  group_by(D_location_name, `D_period`) |> 
+  count(sort = TRUE) |>
+  arrange(D_location_name, D_period) |>
+  group_by(D_location_name) |> 
+  mutate(perc_periods_at_school = round(100*n/sum(n),1)) |>
+  select(D_location_name,`D_period`,perc_periods_at_school)|>
   pivot_wider(names_from = `D_period`, 
               values_from = perc_periods_at_school, 
-              names_prefix = "Period_") %>%
+              names_prefix = "Period_") |>
   rename_all(~ ifelse(. == "", "Period_unknown", .))
 
 # Springfield finding: schools do NOT have similar number of records per period
 checks_table <- update_check(
   check_id = 11,
   check_name = "Check count of records by period by school. What % are 1-8?", 
-  value = cs_raw_file %>%
-    group_by(D_period) %>%
-    count(sort = TRUE) %>%
-    ungroup() %>%
-    mutate(perc_periods_at_school = round(100 * n / sum(n), 1)) %>%
-    filter(D_period %in% c("1", "2", "3", "4", "5", "6", "7", "8")) %>%
-    pull(perc_periods_at_school) %>%
+  value = cs_raw_file |>
+    group_by(D_period) |>
+    count(sort = TRUE) |>
+    ungroup() |>
+    mutate(perc_periods_at_school = round(100 * n / sum(n), 1)) |>
+    filter(D_period %in% c("1", "2", "3", "4", "5", "6", "7", "8")) |>
+    pull(perc_periods_at_school) |>
     sum(),
   notes = "There should be a similar # of records by period per school IF schools have a similar schedule (e.g., all have periods 1-8)",
   status = "Done"
@@ -999,25 +1121,25 @@ get_checks_table() # Print a record of all the most recent checks
 
 # %% 3.5 Count of Term at each school
 # View count of records by D_term/school
-count_term_by_school <- cs_raw_file %>%
-  filter(complete.cases(`D_term`)) %>%
-  group_by(D_location_name, `D_term`) %>% 
-  count(sort = TRUE) %>%
-  arrange(D_location_name) %>%
-  group_by(D_location_name) %>% 
-  mutate(perc_D_term_at_school = round(100*n/sum(n),1)) %>%
-  select(D_location_name,`D_term`,perc_D_term_at_school)%>%
+count_term_by_school <- cs_raw_file |>
+  filter(complete.cases(`D_term`)) |>
+  group_by(D_location_name, `D_term`) |> 
+  count(sort = TRUE) |>
+  arrange(D_location_name) |>
+  group_by(D_location_name) |> 
+  mutate(perc_D_term_at_school = round(100*n/sum(n),1)) |>
+  select(D_location_name,`D_term`,perc_D_term_at_school)|>
   pivot_wider(names_from = `D_term`, 
               values_from = perc_D_term_at_school, 
-              names_prefix = "D_term_") %>%
+              names_prefix = "D_term_") |>
   rename_all(~ ifelse(. == "", "D_term_unknown", .))
 
 
-cs_raw_file %>% 
-  group_by(D_term, D_location_name) %>% 
-  summarize(student_count = n_distinct(D_stu_id)) %>% 
-  arrange(D_location_name) %>% 
-  group_by(D_location_name) %>% 
+cs_raw_file |> 
+  group_by(D_term, D_location_name) |> 
+  summarize(student_count = n_distinct(D_stu_id)) |> 
+  arrange(D_location_name) |> 
+  group_by(D_location_name) |> 
   mutate(percent_students = round(100*student_count/sum(student_count),0))
 
 
@@ -1035,10 +1157,10 @@ cs_raw_file %>%
 # %% a. Return the count
 # Original R Markdown options: echo=TRUE
 # Creates a table that is the employee ID by number of courses they are teaching
-course_count_list <- cs_raw_file %>% 
-  group_by(D_employee_id) %>% 
+course_count_list <- cs_raw_file |> 
+  group_by(D_employee_id) |> 
   summarize(course_count = n_distinct(D_course_name),
-            student_load = n_distinct(D_stu_id)) %>% 
+            student_load = n_distinct(D_stu_id)) |> 
   mutate(course_count_bucket = case_when(course_count == 0 ~ "0",
           course_count <= 2 ~ "01-02",
           course_count <= 4 ~ "03-04",
@@ -1054,9 +1176,9 @@ course_count_list <- cs_raw_file %>%
 #returns the number of teachers by course count bucket
 total_teachers <- sum(course_count_list$course_count)
 
-course_count_by_bucket <- course_count_list %>%
-  group_by(course_count_bucket) %>%
-  summarize(n = sum(course_count)) %>%
+course_count_by_bucket <- course_count_list |>
+  group_by(course_count_bucket) |>
+  summarize(n = sum(course_count)) |>
   mutate(
     total_teachers = total_teachers,
     pct_of_total = round(100 * (n / total_teachers), 2)
@@ -1077,14 +1199,14 @@ course_count_by_bucket <- course_count_list %>%
 
 # %% b. Investigate teachers with large number of course IDs
 #bring the course count flags back
-teacher_course_count_large <- cs_raw_file %>% 
-  left_join(course_count_list, by = "D_employee_id") %>%
-  filter(course_count > 10) %>%
+teacher_course_count_large <- cs_raw_file |> 
+  left_join(course_count_list, by = "D_employee_id") |>
+  filter(course_count > 10) |>
   group_by(D_employee_id, 
            D_course_name,
            course_count, 
-           student_load)%>% #add additional columns here
-  summarize(course_size = n_distinct(D_stu_id)) %>% 
+           student_load)|> #add additional columns here
+  summarize(course_size = n_distinct(D_stu_id)) |> 
   arrange(course_count,
           D_employee_id,
           D_course_name,
@@ -1106,14 +1228,14 @@ print(n_distinct(teacher_course_count_large$D_employee_id))
 #   investigation, add them at the end of the list in the select() clause
 
 # %% c. Investigate teachers with small number of course IDs
-teacher_course_count_small <- cs_raw_file %>% 
-  left_join(course_count_list, by = "D_employee_id") %>% 
-  filter(course_count < 3) %>%
+teacher_course_count_small <- cs_raw_file |> 
+  left_join(course_count_list, by = "D_employee_id") |> 
+  filter(course_count < 3) |>
   group_by(D_employee_id,
            D_course_name,
            course_count,
-           student_load)%>% #add additional columns here
-  summarize(course_size = n_distinct(D_stu_id)) %>% 
+           student_load)|> #add additional columns here
+  summarize(course_size = n_distinct(D_stu_id)) |> 
   arrange(D_employee_id, D_course_name, course_count, student_load, course_size)
 
 print(n_distinct(teacher_course_count_small$D_employee_id))
@@ -1133,9 +1255,9 @@ print(n_distinct(teacher_course_count_small$D_employee_id))
 
 # %% a. Return the Count
 # Calculates the student count by unique courses 
-student_count_list <- cs_raw_file %>% 
-  group_by(D_employee_id) %>% 
-  summarize(student_count = n_distinct(D_stu_id)) %>% 
+student_count_list <- cs_raw_file |> 
+  group_by(D_employee_id) |> 
+  summarize(student_count = n_distinct(D_stu_id)) |> 
   mutate(student_count_bucket = case_when(student_count == 0 ~ "0",
           student_count <= 5 ~ "1: 01-05",
           student_count <= 15 ~ "2: 06-15",
@@ -1148,14 +1270,14 @@ student_count_list <- cs_raw_file %>%
           student_count > 250 ~ "9: 251+"
           ))
 
-student_count_list %>% group_by(student_count_bucket) %>% count(sort = TRUE)
+student_count_list |> group_by(student_count_bucket) |> count(sort = TRUE)
 
 #returns the number of teachers by course count bucket
 total_teachers <- nrow(student_count_list)
 
-student_count_by_bucket <- student_count_list %>%
-  group_by(student_count_bucket) %>%
-  summarize(n = n()) %>%
+student_count_by_bucket <- student_count_list |>
+  group_by(student_count_bucket) |>
+  summarize(n = n()) |>
   mutate(
     total_teachers = total_teachers,
     pct_of_total = round(100 * (n / total_teachers), 2)
@@ -1172,10 +1294,10 @@ student_count_by_bucket <- student_count_list %>%
 # - **Project Action:** None needed
 
 # %% b. Investigate teachers with large number of student IDs
-teacher_load_large <- cs_raw_file %>% 
-  group_by(D_employee_id, D_course_id, D_course_name) %>% 
-  left_join(student_count_list, by = "D_employee_id") %>%
-  filter(student_count > 200) %>%
+teacher_load_large <- cs_raw_file |> 
+  group_by(D_employee_id, D_course_id, D_course_name) |> 
+  left_join(student_count_list, by = "D_employee_id") |>
+  filter(student_count > 200) |>
   arrange(-student_count,D_employee_id)
   
 print(n_distinct(teacher_load_large$D_employee_id))
@@ -1186,9 +1308,9 @@ print(n_distinct(teacher_load_large$D_employee_id))
 # a. Return the Counts ----
 
 # %% a. Return the Counts
-student_course_count_list <- cs_raw_file %>% 
-  group_by(D_stu_id) %>% 
-  summarize(course_count = n_distinct(D_course_id)) %>% 
+student_course_count_list <- cs_raw_file |> 
+  group_by(D_stu_id) |> 
+  summarize(course_count = n_distinct(D_course_id)) |> 
   mutate(course_count_bucket = case_when(course_count == 0 ~ "0",
           course_count <= 2 ~ "01-2",
           course_count <= 4 ~ "03-4",
@@ -1205,9 +1327,9 @@ student_course_count_list <- cs_raw_file %>%
 #returns the number of students by course count bucket
 total_students <- nrow(student_course_count_list)
 
-student_count_by_bucket <- student_course_count_list %>%
-  group_by(course_count_bucket) %>%
-  summarize(n = n()) %>%
+student_count_by_bucket <- student_course_count_list |>
+  group_by(course_count_bucket) |>
+  summarize(n = n()) |>
   mutate(
     total_students = total_students,
     pct_of_total = round(100 * (n / total_students), 2)
@@ -1225,15 +1347,15 @@ student_count_by_bucket <- student_course_count_list %>%
 #   investigation add to the group_by clause
 
 # %% b. Investigate students with small number of courses
-student_course_count_small <- cs_raw_file %>% 
-  group_by(D_stu_id, D_course_section, D_course_name) %>%
-  count() %>%
-  left_join(student_course_count_list, by = "D_stu_id") %>%
-  filter(course_count < 3) %>%
+student_course_count_small <- cs_raw_file |> 
+  group_by(D_stu_id, D_course_section, D_course_name) |>
+  count() |>
+  left_join(student_course_count_list, by = "D_stu_id") |>
+  filter(course_count < 3) |>
   select(-n)
 
-student_course_count_small %>% 
-  group_by(D_course_name) %>% 
+student_course_count_small |> 
+  group_by(D_course_name) |> 
   summarise(avg_course_count = round(mean(course_count), digits = 0),
             stu_count = n_distinct(D_stu_id))
 
@@ -1250,20 +1372,20 @@ student_course_count_small %>%
 # - **Project Action:** None
 
 #   ```{r}
-#   View(student_subject_grade_count <- cs_raw_file %>% 
+#   View(student_subject_grade_count <- cs_raw_file |> 
 #     select(D_location_name,
 #            D_stu_grade,
 #            D_stu_id,
-#            D_course_subject)%>% 
+#            D_course_subject)|> 
 #     group_by(D_location_name,
-#              D_stu_grade) %>% 
-#     mutate(student_grade_count = n_distinct(D_stu_id)) %>% 
+#              D_stu_grade) |> 
+#     mutate(student_grade_count = n_distinct(D_stu_id)) |> 
 #     group_by(D_location_name,
 #              D_stu_grade,
 #              D_course_subject,
-#              student_grade_count)%>% 
-#     summarise(student_subject_count = n_distinct(D_stu_id)) %>% 
-#     mutate(pct_of_total= 100*(student_subject_count / student_grade_count)) %>% 
+#              student_grade_count)|> 
+#     summarise(student_subject_count = n_distinct(D_stu_id)) |> 
+#     mutate(pct_of_total= 100*(student_subject_count / student_grade_count)) |> 
 #     arrange(D_location_name)
 #     )
 
@@ -1293,9 +1415,9 @@ student_course_count_small %>%
 # - **Project Team Action:**
 
 #   ```{r}
-#   #cs_raw_file <- cs_raw_file %>% 
+#   #cs_raw_file <- cs_raw_file |> 
 #     # Remove columns you don't need
-#   #  select(-c(EXAMPLE_FIELD)) %>% 
+#   #  select(-c(EXAMPLE_FIELD)) |> 
 #     # Rename columns to potentially use down the line
 #   #  rename(D_example = EXAMPLE_FIELD)
 #   ```
@@ -1357,7 +1479,5 @@ ers_write_sharepoint(
   folder_path = raw_data_folder_path,
   file_name_with_extension = 
     "/2. Processed Data/01_course_data_post_validation.csv")
-
-
 
 # Great job!!!

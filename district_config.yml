@@ -1,0 +1,124 @@
+# =============================================================================
+# district_config.yml
+# The SINGLE adaptation surface for the processing pipeline + review artifact.
+#
+# Everything district-specific lives here, not inside the scripts. To run a new
+# district, you copy this file and edit the knobs — the code does not change.
+# This is the "config IS the template" tenet made concrete. Each block is
+# annotated with the tier that owns the decision.
+# =============================================================================
+
+district: Springfield
+year: "2024-25"
+
+# ---- Column map — the single crosswalk: district header -> ERS D_ name ------
+# Keys are ERS standard names, values are this district's raw column headers.
+# Applied once (rename(any_of(...))) and reusable by every script 01-08.
+# Fields that are set to a literal "MISSING" or derived (not a rename) are NOT
+# listed here — they're handled in coding/derivation, not intake.
+column_map:
+  course_schedule:
+    D_course_id:         Crs_ID
+    D_course_name:       Crs_Name
+    D_location_id:       Sch_ID
+    D_location_name:     Sch_Name
+    D_employee_id:       Teacher_ID
+    D_term:              Term
+    D_expression:        Rotation      # gotcha: this district's "Rotation" is the expression
+    D_period:            Period
+    D_course_section:    Section
+    D_course_section_id: SECTIONID
+    D_stu_id:            Stu_ID
+    D_room:              Room_Nu
+    D_year_id:           YEAR_ID
+  demographics:
+    D_stu_id:            Stu_ID
+    D_stu_grade:         "Current Grade Level ID"
+    D_location_id:       "SIS School ID"
+    D_stu_swd_flag:      "Stu_SWD flag"
+    D_stu_ell_flag:      "Stu_ELL flag"
+    D_stu_poverty_flag:  "Stu_Poverty Flag"
+
+# ---- Tier 0 — raw scan ------------------------------------------------------
+# Mostly observed, not configured. Data inventory is recorded per run.
+intake:
+  enrollment_type: snapshot        # snapshot | cumulative
+  # if cumulative, record the agreed snapshot date:
+  snapshot_date: null
+  time_field: expression           # expression | period_rotation
+  # data inventory is filled in per run (present / partial / missing)
+
+# ---- Tier 1 — student & course coding --------------------------------------
+student_drop:
+  # who we exclude for missing/insufficient demographics (born ONCE, here)
+  rule: "drop students with no SWD/ELL/FRL demographic record"
+
+coding:
+  uncoded_flag_threshold_pct: 2    # auto-flag if > this % of records UNCODED
+
+exclusions:
+  # the Step 6 "= FALSE if ..." rules, as data (born ONCE, applied as flags)
+  time_metric_false_when:
+    - "C_subject_area == 'Untracked'"
+    - "C_time_of_day %in% c('Before School','After School')"
+    - "C_subject == 'Internship'"
+    - "C_class_format == 'Virtual'"
+  class_size_metric_false_when:
+    - "C_subject == 'Maintenance'"
+    - "C_subject == 'Internship'"
+    - "C_class_format == 'Virtual'"
+    - "C_subject_area == 'Un-prepped'"
+    - "C_subject == 'Teaching Assistant'"
+  teacher_load_metric_false_when:
+    - "C_subject == 'Maintenance'"
+    - "C_subject == 'Internship'"
+    - "C_class_format == 'Virtual'"
+    - "C_subject_area == 'Un-prepped'"
+    - "C_subject == 'Teaching Assistant'"
+
+relevant_periods:
+  # the Sci-Tech judgment: which periods carry metrics we care about
+  include: ["1-4(A)", "1-4(B)", "8(A)", "8(B)"]
+  exclude_reason:
+    "5-7": "afterschool / counselor assignments — not class/time/teacher-load time"
+
+# ---- Tier 2 — modeling-ready ------------------------------------------------
+class_id:
+  # concatenation recipe; NEVER include course name/id
+  recipe: [D_location_id, D_term, D_rotation, D_period, D_room]
+  include_section: false           # the 11-vs-22 Section test decides this
+
+weights:
+  term:            { FY: 1.0, S1: 0.5, S2: 0.5, Q1: 0.25, Q2: 0.25, Q3: 0.25, Q4: 0.25 }
+  # term INTERVALS drive overlap-aware DB sizing (position, not just length):
+  # two terms conflict iff their intervals intersect. FY vs S1 -> overlap; S1 vs S2 -> none.
+  term_interval:   { FY: [0, 1], S1: [0, 0.5], S2: [0.5, 1],
+                     Q1: [0, 0.25], Q2: [0.25, 0.5], Q3: [0.5, 0.75], Q4: [0.75, 1] }
+  # rotation as atomic day-sets; two rotations conflict iff sets intersect:
+  rotation_days:   { A: [A], B: [B], AB: [A, B], Daily: [A, B] }
+  # if no bell info, assume 1.0 (revisit if modal courses/student looks wrong):
+  default_period_weight: 1.0
+
+db_resolution:
+  # per-TYPE resolve decision (born in Tier 1 sizing, executed Tier 2/3).
+  # full = explode + identify + resolve; hand = targeted class-id edits; skip = documented.
+  student: full
+  teacher: full
+  class:   full
+
+teacher_db:
+  consolidate_max_size: 35         # consolidated size > this -> "load off"
+  exempt_subjects: [Art, PE]       # ...unless the subject is exempt
+
+# ---- Tier 3 — precision-ready ----------------------------------------------
+bell_overrides:
+  # per-school bell reconciliation, as a table (not hardcoded in 08)
+  Putnam:   { all_periods_minutes: 43 }
+  # Sci-Tech: derive minutes from its own bell schedule
+
+self_contained:
+  swd_ell_threshold_pct: 50        # >this% flagged self-contained — FLAG ONLY;
+                                   # metrics decide per-metric whether to filter
+
+buckets:
+  class_size: [[0, 6], [7, 12], [13, 18], [19, 35], [36, 40], [41, 50], [51, null]]
