@@ -1,8 +1,8 @@
 # =============================================================================
-# tier_review.R
-# Reusable "tier block" for the Course Schedule processing review artifact.
+# review_helpers.R
+# Rendering engine for the stage review docs (02, 03, ...). No content of its
 #
-# A tier = a title, a question, and a list of checks. Each check is a DECISION
+# own — the toolkit each stage sources. A stage = a title, a question, and a list of checks. Each check is a DECISION
 # (yardstick + recorded call) and may own EVIDENCE (small summary tables the
 # analyst eyeballs to make that call), rendered right beneath it.
 #
@@ -14,7 +14,7 @@
 #   - Config is the template: district knobs live in the YAML config.
 #
 # Decision lines render as compact HTML blocks; evidence renders as gt tables.
-# render_tier() returns an htmltools tagList — return it from a Quarto chunk.
+# render_stage() returns an htmltools tagList — return it from a Quarto chunk.
 # =============================================================================
 
 suppressPackageStartupMessages({
@@ -87,11 +87,11 @@ tr_check <- function(id, question,
   )
 }
 
-tr_tier <- function(number, title, question, checks, enabled = TRUE) {
+tr_stage <- function(number, title, question, checks, enabled = TRUE) {
   structure(
     list(number = number, title = title, question = question,
          checks = checks, enabled = enabled),
-    class = "tr_tier"
+    class = "tr_stage"
   )
 }
 
@@ -176,7 +176,7 @@ tr_render_evidence <- function(chk) {
 }
 
 # ---- The one renderer -------------------------------------------------------
-render_tier <- function(tier) {
+render_stage <- function(tier) {
   disabled <- !isTRUE(tier$enabled)
 
   st <- vapply(tier$checks, function(c) if (disabled) "na" else c$status, character(1))
@@ -195,7 +195,7 @@ render_tier <- function(tier) {
                    ";color:#fff;padding:12px 16px;"),
     tags$div(style = "display:flex;align-items:baseline;gap:8px;",
       tags$span(style = "font-weight:700;font-size:12px;background:rgba(255,255,255,.15);padding:2px 8px;border-radius:999px;",
-                glue("Tier {tier$number}")),
+                tier$number),
       tags$span(style = "font-weight:600;font-size:16px;", tier$title)),
     tags$div(style = "margin-top:5px;font-size:13px;opacity:.9;font-style:italic;", q),
     tags$div(style = "margin-top:7px;font-size:12px;opacity:.95;",

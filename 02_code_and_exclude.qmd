@@ -1,0 +1,250 @@
+---
+title: "Course Schedule Processing — 02 · Intake & Coding Review"
+subtitle: "Detroit Public Schools · Fall 2026"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    embed-resources: true
+    theme: cosmo
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+# Remove everything from any previous sessions
+rm(list = ls())
+library(gt)
+library(dplyr)
+library(tidyr)
+library(yaml)
+library(Microsoft365R)     # get_sharepoint_site() + drive objects
+library(erstools)          # ers_read_sharepoint()
+source("00_review_helpers.R") # the rendering engine (tr_check / tr_stage / render_stage)
+config <- yaml::read_yaml("00_district_config.yml")
+
+orgfiles_site_url <- "https://erstrategies1.sharepoint.com/sites/orgfiles"
+orgfiles_site  <- get_sharepoint_site(site_url = orgfiles_site_url)
+internal_drive <- orgfiles_site$get_drive("Internal")
+
+raw_data_folder_path <- "District Partners/Detroit Public Schools/26-27 HS Redesign Implementation/1. Data & Analysis - Secure/Fall 2026 Course Schedule Analysis"
+
+# Stage 01 output (prepped, D_-named)
+cs_data <- ers_read_sharepoint(
+  folder_path = raw_data_folder_path,
+  file_name_with_extension = "/2. Processed Data/01_course_data_post_explore.csv")
+
+# Hand-coded course coding (this stage's human input). Wrapped so the doc still
+# renders before it exists — the coding tables just show "data not loaded".
+cs_course_coding <- tr_safe(
+  ers_read_sharepoint(
+    folder_path = raw_data_folder_path,
+    file_name_with_extension = "/1. Coding/course_coding_2026.xlsx"),
+  otherwise = NULL)
+
+# Join coding on + derive exclusions (only when coding present; on any error
+# cs_data is left as-is, so a half-built coding file never breaks the render).
+if (!is.null(cs_course_coding)) {
+  cs_data <- tr_safe({
+    jf <- "D_course_id"
+    cs_data |>
+      select(-any_of(setdiff(names(cs_course_coding), jf))) |>
+      left_join(cs_course_coding, by = jf) |>
+      mutate(
+        C_course_time_exclude = case_when(
+          C_time_metric == FALSE                   ~ "Exclude",
+          C_course_subject_area == "Untracked"     ~ "Exclude",
+          C_course_time_of_day  != "During school" ~ "Exclude",
+          C_course_subject == "Internship"         ~ "Exclude",
+          C_course_format  == "Virtual"            ~ "Exclude",
+          TRUE                                     ~ "Include"),
+        C_class_size_and_teacher_load_exclude = case_when(
+          C_class_size_metric   == FALSE           ~ "Exclude",
+          C_teacher_load_metric == FALSE           ~ "Exclude",
+          C_course_subject_area == "Un-prepped"    ~ "Exclude",
+          C_course_subject %in% c("Maintenance","Internship",
+                                  "Teaching Assistant","Credit Recovery") ~ "Exclude",
+          C_course_format == "Virtual"             ~ "Exclude",
+          TRUE                                     ~ "Include"))
+  }, otherwise = cs_data)
+}
+```
+
+## How to read this
+
+This is the **first formal review** — `01` is investigation-only, so the intake
+decisions get recorded here alongside coding. It reads the prepped file from
+`01` plus the hand-coded `course_coding_2026.xlsx`. Each entry is a **decision**
+with an **evidence table** beneath where it helps. Statuses never stop the
+render: a not-yet-received input shows a flag, and until the coding file exists
+the coding tables read "data not loaded."
+
+Golden rule: **processing flags, it never deletes** — exclusions are columns a
+later metric can honor or ignore.
+
+## 02 — Intake & coding review
+
+```{r stage02}
+s02 <- tr_stage(
+  number = "02",
+  title  = "Intake & Coding Review",
+  question = "Do we have the right data, do we know what each course is, and is the right thing excluded for the right reason?",
+  checks = list(
+
+    # ---- intake (data prepped in 01, reviewed here) ----
+    tr_check("2.0", "Snapshot or cumulative enrollment?",
+      good    = "Unambiguous; if cumulative, a snapshot date is agreed with the district.",
+      value   = config$intake$enrollment_type,
+      status  = "todo",
+      records = "Cumulative (enter/exit dates); filtered to Year_End 2026 in 01. Within-year snapshot decision still pending."),
+
+    tr_check("2.1", "Are all critical fields present with ERS D_ names?",
+      good    = "Every critical D_ field present (mapping done in 01).",
+      value   = tr_safe({
+                  crit <- c("D_stu_id","D_employee_id","D_course_id","D_term",
+                            "D_expression","D_location_id","D_location_name")
+                  sum(!crit %in% names(cs_data))
+                }, NA),
+      status  = "ok",
+      records = "Standardized in 01 (see config$column_map). Value = # critical D_ fields still missing."),
+
+    tr_check("2.2", "Term structure — full-year, semesterized, or a mix?",
+      good    = "Every term value has a configured weight; the derived split looks sane.",
+      value   = "derived in 01 (FY / S1 / S2)",
+      status  = "flag",
+      records = "Term is DERIVED — the value counts ARE the check: a sane FY/S1/S2 split (not ~100% FY) means the derivation held.",
+      evidence = function() {
+        configured <- names(config$weights$term)
+        cs_data |>
+          count(D_term, name = "n_records") |>
+          arrange(D_location_name) |>
+          mutate(in_config = if_else(D_term %in% configured, "yes", "MISSING from config"))
+      }),
+
+    tr_check("2.3", "Records per student, by school?",
+      good    = "Per-school counts and expression variety look plausible for HS schedules.",
+      value   = tr_safe(
+                  cs_data |> count(D_stu_id) |> count(n) |>
+                    slice_max(nn, n = 1, with_ties = FALSE) |> pull(n), NA),
+      status  = "todo",
+      records = "Modal records/student + per-school gut check.",
+      evidence = function() {
+        modal <- cs_data |>
+          count(D_location_name, D_stu_id, name = "recs") |>
+          count(D_location_name, recs, name = "n") |>
+          group_by(D_location_name) |>
+          slice_max(n, n = 1, with_ties = FALSE) |>
+          transmute(D_location_name, modal_records = recs)
+        cs_data |>
+          group_by(D_location_name) |>
+          summarise(
+            n_students    = n_distinct(D_stu_id),
+            n_teachers    = n_distinct(D_employee_id),
+            terms         = paste(sort(unique(D_term)), collapse = ", "),
+            n_expressions = n_distinct(D_expression),
+            .groups = "drop") |>
+          left_join(modal, by = "D_location_name") |>
+          arrange(D_location_name)
+      }),
+
+    tr_check("2.4", "Data inventory — demographics / proficiency / teacher experience",
+      good    = "Each present, or flagged with a district follow-up.",
+      value   = "all not received yet",
+      status  = "missing",
+      records = "Demographics, proficiency, and teacher experience all outstanding -> follow up. Demographics unlocks 2.5 and student grade-level cuts."),
+
+    tr_check("2.5", "Merge demographics & set the student-drop decision",
+      good    = "1 row per student in the demo file; matches understood.",
+      status  = "missing",
+      records = "Waits on demographics. It only removes students, so coding (2.6-2.8) runs now regardless; apply the drop when the file arrives — no re-coding."),
+
+    # ---- coding & exclusions (this stage's own work) ----
+    tr_check("2.6", "Code the courses — is the coding output sane?",
+      good    = glue::glue("Uncoded <= {config$coding$uncoded_flag_threshold_pct}% of records; distributions plausible (not e.g. 40% Non-Departmentalized)."),
+      status  = "todo",
+      records = "Scan the record-weighted distributions for sane categories.",
+      evidence = function() {
+        sa <- cs_data |> count(C_course_subject_area, name = "n_records") |>
+          mutate(pct_records = round(100 * n_records / sum(n_records), 1)) |>
+          arrange(desc(n_records))
+        sub <- cs_data |> count(C_course_subject_area, C_course_subject, name = "n_records") |>
+          mutate(pct_records = round(100 * n_records / sum(n_records), 1)) |>
+          arrange(desc(n_records))
+        list("Subject Area — % of records" = sa,
+             "Subject — % of records"      = sub)
+      }),
+
+    tr_check("2.7", "Derive exclusions — right thing dropping, right reason?",
+      good    = "Every excluded course traces to a coding value that justifies it.",
+      status  = "todo",
+      records = "Course-weighted: each excluded course with the coding that caused it.",
+      evidence = function() {
+        cs_data |>
+          distinct(D_course_id, .keep_all = TRUE) |>
+          filter(C_course_time_exclude == "Exclude" |
+                 C_class_size_and_teacher_load_exclude == "Exclude") |>
+          count(C_course_format, C_course_subject,
+                C_course_time_exclude,
+                C_class_size_and_teacher_load_exclude,
+                name = "n_courses", sort = TRUE)
+      }),
+
+    tr_check("2.8", "Which expressions carry real instruction?",
+      good    = "Expressions that are entirely Untracked / Un-prepped / Excluded are identified so they fall out.",
+      status  = "todo",
+      records = "Records per expression x subject area — a row concentrated in Untracked/Un-prepped is a non-instructional slot.",
+      evidence = function() {
+        cs_data |>
+          count(D_expression, C_course_format, name = "n_records") |>
+          pivot_wider(names_from = C_course_format,
+                      values_from = n_records, values_fill = 0) |>
+          arrange(D_expression)
+      }),
+
+    tr_check("2.9", "TPR weights, class weight, class id, and DB sizing",
+      good    = "Signpost only.",
+      status  = "na",
+      records = "These move to stage 03 (double-bookings), where term/period/rotation weights and the expression parse live.")
+  )
+)
+
+render_stage(s02)
+```
+
+## Re-export for the next stage
+
+Once coding is joined and the review looks right, write the post-coding file so
+stage 03 reads fresh coding. Flip `eval` to `true` when ready.
+
+```{r export}
+#| eval: false
+ers_write_sharepoint(
+  data = cs_data,
+  folder_path = raw_data_folder_path,
+  file_name_with_extension = "/2. Processed Data/02_course_data_post_code_and_exclude.csv")
+```
+
+```{r}
+
+late_entry_courses <- cs_data |>
+  filter(!is.na(D_course_id)
+  ) |>
+  group_by(D_location_name, D_course_id) |>
+  summarise(
+    D_course_name = first(D_course_name, default = NA_character_),
+    M_instances = n(),
+    M_entered_on_or_after = sum(
+      !is.na(D_stu_enter_date) &
+        D_stu_enter_date >= as.Date("2026-01-05")
+    ),
+    M_missing_enter_date = sum(is.na(D_stu_enter_date)),
+    M_pct_entered_on_or_after = M_entered_on_or_after / M_instances,
+    .groups = "drop"
+  ) |>
+  filter(M_pct_entered_on_or_after > 0.95) |>
+  arrange(D_location_name, desc(M_pct_entered_on_or_after))
+
+```

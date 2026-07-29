@@ -1,0 +1,82 @@
+# =============================================================================
+# district_config.yml — the single adaptation surface for the pipeline.
+# New district = copy this file and edit the knobs; the code doesn't change.
+# Each block notes the tier that owns the decision.
+# =============================================================================
+
+district: Detroit Public Schools
+year: "2025-26"                    # Fall 2026 schedule; Year_End == 2026
+
+# ---- 01 — intake --------------------------------------------------------
+intake:
+  enrollment_type: cumulative      # has enter/exit dates; snapshot logic is stage 02
+  snapshot_date: null
+  time_field: expression           # Detroit encodes time in "Period Expression"
+
+# ---- 01 prep recipe (promoted from 01_explore.qmd) ----------------------
+# The recipe that turns the raw 2.6M-row export into the prepped checkpoint
+# (01_course_data_post_explore.csv). This is the source of truth; the exported
+# file is its cached output. Change the recipe -> re-export.
+location_join:                     # promoted JOIN
+  source: "1. Coding/location_coded.xlsx"
+  key_raw: EEM_CODE                # cast to integer -> D_location_id
+  key: D_location_id
+  brings_in: [D_location_name, C_location_type]
+
+scope:                             # promoted FILTER decisions
+  location_type_keep: ["Neighborhood School"]
+  year_end_keep: 2026
+  drop_when_null: ["EEM_CODE", "Period Expression"]
+
+derivations:                       # things column_map can't express (computed)
+  D_course_id_suffix: "str_sub(`Course Number`, -2)"
+  D_term: >
+    S1/S2 from course-number suffix; else '-A'/'-B' at end of course name -> S1/S2; else FY
+
+column_map:                        # promoted RENAMES (raw header -> D_ name)
+  course_schedule:
+    D_stu_id:            MaskedStudentID
+    D_employee_id:       MaskedTeacherID
+    D_expression:        Period Expression
+    D_course_name:       Course Name
+    D_course_id:         Course Number
+    D_sced_subject_code: SCED Code
+    D_year_id:           Year_End
+    D_stu_enter_date:    Date Enrolled
+    D_stu_exit_date:     Date Left
+
+# ---- 01 — data inventory ------------------------------------------------
+data_inventory:
+  demographics:       not_received    # SWD/ELL/FRL + student grade level — expected later
+  proficiency:        not_received
+  teacher_experience: not_received
+
+# ---- 02 — coding --------------------------------------------------------
+coding:
+  uncoded_flag_threshold_pct: 2
+  # Detroit coding inputs: D_sced_subject_code, AP Flag, Accelerated Course Flag,
+  #                        Virtual Flag, Virtual Delivery Type
+relevant_periods:
+  include: []                      # TBD in stage 02 — time is an expression, not yet parsed into periods
+
+# ---- 03 — modeling-ready ------------------------------------------------
+class_id:
+  recipe: [D_location_id, D_term, D_expression]   # + section field once confirmed
+  include_section: false
+weights:
+  term:          { FY: 1.0, S1: 0.5, S2: 0.5 }
+  term_interval: { FY: [0, 1], S1: [0, 0.5], S2: [0.5, 1] }
+  default_period_weight: 1.0
+db_resolution:
+  student: full
+  teacher: full
+  class:   full
+teacher_db:
+  consolidate_max_size: 35
+  exempt_subjects: [Art, PE]
+
+# ---- 04 — precision-ready ----------------------------------------------
+self_contained:
+  swd_ell_threshold_pct: 50        # flag only; metrics decide
+buckets:
+  class_size: [[0, 6], [7, 12], [13, 18], [19, 35], [36, 40], [41, 50], [51, null]]

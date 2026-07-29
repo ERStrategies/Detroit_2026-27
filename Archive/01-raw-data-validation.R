@@ -562,9 +562,10 @@ get_checks_table()
 
 # %%
 # Detroit: convert location_id into an integer before the merge
+# NAs introduced from "NULL" EEM_CODE values are expected and filtered downstream
 cs_raw_file <- cs_raw_file |>
   mutate(
-    D_location_id = as.integer(D_location_id),
+    D_location_id = suppressWarnings(as.integer(EEM_CODE)),
     D_course_id_suffix = substr(D_course_id, nchar(D_course_id) - 1, nchar(D_course_id))
   )
 
