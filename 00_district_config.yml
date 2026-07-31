@@ -1,27 +1,30 @@
 # =============================================================================
-# district_config.yml — the single adaptation surface for the pipeline.
+# 00_district_config.yml — the single adaptation surface for the pipeline.
 # New district = copy this file and edit the knobs; the code doesn't change.
-# Each block notes the tier that owns the decision.
 # =============================================================================
 
+# START HERE ----
+# Before you run 00_explore.qmd, you must edit this file to point to the raw data for your district. Otherwise, the pipeline will not run!
 district: Springfield Public Schools
 year: "2025-26"
 raw_data_folder_path: "District Partners/Springfield MA/Springfield - 26 - HS Scheduling/1. Data & Analysis - Secure/For R"
 raw_files:
   cs_raw:              "/0. Raw Data/student_course_schedules.csv"
   stu_demographics:    "/0. Raw Data/student_enrollment_and_demographic.xlsx"
+  # FOR COURSE CODING ----
+  # Use the course_coding_data.xlsx export from 01_explore.qmd and the Claude Skill to generate the coding file.
+  # Then, copy it to the /1. Coding folder and update the path below.
   course_coding:       "/1. Coding/cs_course_coding.xlsx"
 
-# ---- 01 — intake --------------------------------------------------------
+# ---- 01 — intake ------------------------------------------------------------
 intake:
-  enrollment_type: snapshot      # has enter/exit dates; snapshot logic is stage 02
+  enrollment_type: snapshot
   snapshot_date: null
-  time_field: expression           # Detroit encodes time in "Period Expression"
+  time_field: expression           # time lives in the expression field (D_expression)
 
-# ---- 01 prep recipe (promoted from 01_explore.qmd) ----------------------
-# The recipe that turns the raw 2.6M-row export into the prepped checkpoint
-# (01_course_data_post_explore.csv). This is the source of truth; the exported
-# file is its cached output. Change the recipe -> re-export.
+# ---- 01 prep recipe (promoted from 01_explore.qmd) --------------------------
+# The recipe that turns the raw export into the prepped checkpoint
+# (01_course_data_post_explore.csv). Source of truth; the export is its cache.
 column_map:
   course_schedule:
     D_location_id:       Sch_ID
@@ -46,40 +49,66 @@ column_map:
     D_stu_ell_flag:      "Stu_ELL flag"
     D_stu_poverty_flag:  "Stu_Poverty Flag"
 
-stu_demographics_join:             # JOIN: merge student demographics onto cs_prepped
-  key: D_stu_id                    # join key (post-rename, both sides)
+stu_demographics_join:             # JOIN: merge student demographics onto cs_prepped (stage 01)
+  key: D_stu_id
   brings_in: [D_stu_grade, D_stu_swd_flag, D_stu_ell_flag, D_stu_poverty_flag]
-  recode:                          # optional: recode values post-rename (raw value -> new value) DELETE if you don't need!
+  recode:                          # optional: raw value -> new value (DELETE or HASH if not needed)
     D_stu_swd_flag: {"Y": 1, "N": 0}
     D_stu_ell_flag: {"Y": 1, "N": 0}
     D_stu_poverty_flag: {"Y": 1, "N": 0}
 
 scope:                             # FILTER decisions
-  drop_when_null: ["D_stu_id", "D_stu_grade"]   # post-rename names; filters away students missing from stu_demographics
+  drop_when_null: ["D_stu_id", "D_stu_grade"]   # drops students missing from stu_demographics
 
-
-# ---- 01 — data inventory ------------------------------------------------
-data_inventory:
-  demographics:       received    # SWD/ELL/FRL + student grade level — expected later
-  proficiency:        received
-  teacher_experience: received
-
-# ---- 02 — coding --------------------------------------------------------
+# ---- 02 — coding & exclusions ----------------------------------------------
 coding:
+  join_key: D_course_name          # cs_data <- coding, joined on this
   uncoded_flag_threshold_pct: 2
-  # Detroit coding inputs: D_sced_subject_code, AP Flag, Accelerated Course Flag,
-  #                        Virtual Flag, Virtual Delivery Type
-relevant_periods:
-  include: []                      # TBD in stage 02 — time is an expression, not yet parsed into periods
 
-# ---- 03 — modeling-ready ------------------------------------------------
+# Exclusion rules, interpreted by the pipeline (no code edits per district).
+# A record is "Exclude" for a metric if ANY rule matches; else "Include".
+# ops: eq | ne | in | not_in. A rule whose column isn't present is skipped.
+exclusions:
+  C_course_time_exclude:
+    - { col: C_course_subject_area, op: eq, val: Untracked }
+    - { col: C_course_time_of_day,  op: ne, val: "During school" }
+    - { col: C_course_subject,      op: eq, val: Internship }
+    - { col: C_course_format,       op: eq, val: Virtual }
+  C_class_size_and_teacher_load_exclude:
+    - { col: C_course_subject_area, op: eq, val: Un-prepped }
+    - { col: C_course_subject,      op: in, val: [Maintenance, Internship, Teaching Assistant, Credit Recovery] }
+    - { col: C_course_format,       op: eq, val: Virtual }
+
+# ---- 03 — modeling-ready ----------------------------------------------------
 class_id:
-  recipe: [D_location_id, D_term, D_expression]   # + section field once confirmed
-  include_section: false
+  recipe: [D_location_id, D_expression, D_term, D_employee_id]   # D_course_section_id is Springfield specific; other districts may use D_course_section
+  include_section: true
 weights:
-  term:          { 3500: 1.0, 3501: 0.5, 3502: 0.5 }
-  term_interval: { 3500: [0, 1], 3501: [0, 0.5], 3502: [0.5, 1] }
+  term:          { 3500: 1.0,           3501: 0.5,       3502: 0.5 }
+  term_interval: { 3500: [0, 1],        3501: [0, 0.5],  3502: [0.5, 1] }
+  term_expands:  { 3500: [3501, 3502],  3501: [3501],    3502: [3502] }
   default_period_weight: 1.0
+
+# What-if filters for DB sizing ONLY (2.9). Drops matching rows before sizing so
+# you can see how ignoring certain records changes the double-booking %. Does NOT
+# affect coding, exclusions, or the exported data. If you want no filters, leave as "db_sizing_filters: []". Otherwise, remove the "[]" and add a list of rules.
+# Each rule is a map with three keys: e.g., "{ col: D_course_name, op: in, val: 'VHS Anchor Year' }"
+# op can be: equals | not_equals | in | not_in. A rule whose column isn't present is skipped.
+db_sizing_filters:
+  - { col: D_course_name,     op: in,     val: "VHS Anchor Year" }
+
+# Expression grammar for parsing D_expression -> meetings (stage 02 DB sizing).
+# atoms: ordered slots for ranges crossing half/block periods (empty here —
+#        Springfield periods are plain integers, so ranges expand numerically).
+# rotations: token -> atomic days; "A-B" means the section meets on both days.
+expression:
+  atoms: []
+  expands: {}
+  rotations:
+    A:     ["A"]
+    B:     ["B"]
+    "A-B": ["A", "B"]
+    AB:    ["A", "B"]
 db_resolution:
   student: full
   teacher: full
@@ -88,7 +117,7 @@ teacher_db:
   consolidate_max_size: 35
   exempt_subjects: [Art, PE]
 
-# ---- 04 — precision-ready ----------------------------------------------
+# ---- 04 — precision-ready ---------------------------------------------------
 self_contained:
   swd_ell_threshold_pct: 50        # flag only; metrics decide
 buckets:

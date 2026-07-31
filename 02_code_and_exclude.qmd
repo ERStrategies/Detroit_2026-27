@@ -1,6 +1,6 @@
 ---
-title: "Course Schedule Processing — 02 · Intake & Coding Review"
-subtitle: "Detroit Public Schools · Fall 2026"
+title: "Course Schedule Processing — 02 · Coding & Exclusions Review"
+subtitle: "Springfield Public Schools · 2025-26"
 date: today
 format:
   html:
@@ -15,15 +15,17 @@ execute:
 ---
 
 ```{r setup}
-# Remove everything from any previous sessions
 rm(list = ls())
 library(gt)
 library(dplyr)
 library(tidyr)
+library(glue)
 library(yaml)
-library(Microsoft365R)     # get_sharepoint_site() + drive objects
-library(erstools)          # ers_read_sharepoint()
-source("00_review_helpers.R") # the rendering engine (tr_check / tr_stage / render_stage)
+library(Microsoft365R)
+library(erstools)
+source("00_review_helpers.R")
+source("00_expression_helpers.R")
+source("00_db_helpers.R")
 config <- yaml::read_yaml("00_district_config.yml")
 raw_data_folder_path <- config$raw_data_folder_path
 
@@ -31,210 +33,358 @@ orgfiles_site_url <- "https://erstrategies1.sharepoint.com/sites/orgfiles"
 orgfiles_site  <- get_sharepoint_site(site_url = orgfiles_site_url)
 internal_drive <- orgfiles_site$get_drive("Internal")
 
-# raw_data_folder_path is set from config above
-
-# Stage 01 output (prepped, D_-named)
+# Stage 01 output (prepped, D_-named, demographics already merged in 01).
 cs_data <- ers_read_sharepoint(
   folder_path = raw_data_folder_path,
   file_name_with_extension = "/2. Processed Data/01_course_data_post_explore.csv")
 
-# Hand-coded course coding (this stage's human input). Wrapped so the doc still
-# renders before it exists — the coding tables just show "data not loaded".
+# Hand-coded course coding. Wrapped so the doc renders before it exists.
 cs_course_coding <- tr_safe(
   ers_read_sharepoint(
     folder_path = raw_data_folder_path,
     file_name_with_extension = config$raw_files$course_coding),
   otherwise = NULL)
 
-# Join coding on + derive exclusions (only when coding present; on any error
-# cs_data is left as-is, so a half-built coding file never breaks the render).
+# --- Config-driven exclusion interpreter (no per-district code edits) ---------
+# A record is "Exclude" for a metric if ANY of that metric's rules matches.
+# A rule whose column isn't present yet is skipped — never jams.
+apply_exclusions <- function(df, rules) {
+  for (field in names(rules)) {
+    excl <- rep(FALSE, nrow(df))
+    for (rule in rules[[field]]) {
+      if (!rule$col %in% names(df)) next
+      x <- df[[rule$col]]; v <- rule$val
+      hit <- switch(rule$op,
+                    eq = x == v, ne = x != v,
+                    `in` = x %in% v, not_in = !(x %in% v),
+                    rep(FALSE, length(x)))
+      hit[is.na(hit)] <- FALSE
+      excl <- excl | hit
+    }
+    df[[field]] <- ifelse(excl, "Exclude", "Include")
+  }
+  df
+}
+# --- what-if sizing filters (drop rows from DB sizing ONLY; default none) ------
+.sizing_match <- function(df, rule) {
+  if (!rule$col %in% names(df)) return(rep(FALSE, nrow(df)))
+  x <- df[[rule$col]]; v <- rule$val
+  hit <- switch(rule$op,
+                equals = x == v, not_equals = x != v,
+                `in` = x %in% v, not_in = !(x %in% v),
+                rep(FALSE, length(x)))
+  hit[is.na(hit)] <- FALSE
+  hit
+}
+apply_sizing_filters <- function(df, filters) {
+  if (is.null(filters) || length(filters) == 0) return(df)
+  drop <- rep(FALSE, nrow(df))
+  for (rule in filters) drop <- drop | .sizing_match(df, rule)
+  df[!drop, , drop = FALSE]
+}
+sizing_filter_summary <- function(df, filters) {
+  if (is.null(filters) || length(filters) == 0)
+    return(data.frame(rule = "(none — no sizing filters set)", rows_removed = 0L))
+  do.call(rbind, lapply(filters, function(rule)
+    data.frame(rule = paste(rule$col, rule$op, paste(rule$val, collapse = " | ")),
+               rows_removed = sum(.sizing_match(df, rule)))))
+}
+# --- Join coding + capture merge diagnostics + derive exclusions --------------
+join_key   <- if (!is.null(config$coding$join_key)) config$coding$join_key else "D_course_name"
+merge_diag <- NULL
 if (!is.null(cs_course_coding)) {
   cs_data <- tr_safe({
-    jf <- "D_course_name"
-    cs_data |>
-      select(-any_of(setdiff(names(cs_course_coding), jf))) |>
-      left_join(cs_course_coding, by = jf) |>
-      mutate(
-        C_course_time_exclude = case_when(
-          C_course_subject_area == "Untracked"     ~ "Exclude",
-          C_course_time_of_day  != "During school" ~ "Exclude",
-          C_course_subject == "Internship"         ~ "Exclude",
-          C_course_format  == "Virtual"            ~ "Exclude",
-          TRUE                                     ~ "Include"),
-        C_class_size_and_teacher_load_exclude = case_when(
-          C_course_subject_area == "Un-prepped"    ~ "Exclude",
-          C_course_subject %in% c("Maintenance","Internship",
-                                  "Teaching Assistant","Credit Recovery") ~ "Exclude",
-          C_course_format == "Virtual"             ~ "Exclude",
-          TRUE                                     ~ "Include"))
+    coded_cols <- setdiff(names(cs_course_coding), join_key)
+    cc <- cs_course_coding; cc$.coded <- TRUE
+    n_before   <- nrow(cs_data)
+    key_unique <- !any(duplicated(cc[[join_key]]))
+    joined <- cs_data |>
+      select(-any_of(coded_cols)) |>
+      left_join(cc, by = join_key)
+    unmatched <- joined |> filter(is.na(.coded))
+    merge_diag <<- list(
+      key = join_key, key_unique = key_unique,
+      n_before = n_before, n_after = nrow(joined),
+      row_stable = identical(n_before, nrow(joined)),
+      n_unmatched = nrow(unmatched),
+      unmatched_courses = unmatched |> distinct(D_course_name) |> arrange(D_course_name))
+    joined |> select(-.coded) |> apply_exclusions(config$exclusions)
   }, otherwise = cs_data)
 }
+
+has_cols <- function(...) all(c(...) %in% names(cs_data))
+
+# --- Double-booking sizing (needs coding + exclusions above) ------------------
+spec         <- tr_safe(expr_spec(config), NULL)
+term_expands <- tr_safe(term_expands_spec(config), NULL)
+cs_data$C_class_id <- build_class_id(cs_data, config$class_id$recipe)
+cs_size <- apply_sizing_filters(as.data.frame(cs_data), config$db_sizing_filters)
+
+# explode once; flag per the ERS method — students on time-included records,
+# teachers on teacher-load-included records.
+cs_long <- tr_safe(explode_conflicts(cs_size, spec, term_expands), NULL)
+flagged_students <- tr_safe(
+  unique(db_flagged(filter(cs_long, C_course_time_exclude == "Include"),
+                    "D_stu_id", "C_class_id")$D_stu_id), character(0))
+flagged_teachers <- tr_safe(
+  unique(db_flagged(filter(cs_long, C_class_size_and_teacher_load_exclude == "Include"),
+                    "D_employee_id", "C_class_id")$D_employee_id), character(0))
+
+pct_of <- function(a, b) { r <- round(100 * a / b, 1); r[is.na(b) | b == 0] <- NA_real_; r }
+n_stu_time <- tr_safe(n_distinct(cs_data$D_stu_id[cs_data$C_course_time_exclude == "Include"]), NA)
+n_tch_load <- tr_safe(n_distinct(cs_data$D_employee_id[cs_data$C_class_size_and_teacher_load_exclude == "Include"]), NA)
 ```
 
 ## How to read this
 
-This is the **first formal review** — `01` is investigation-only, so the intake
-decisions get recorded here alongside coding. It reads the prepped file from
-`01` plus the hand-coded `cs_course_coding.xlsx`. Each entry is a **decision**
-with an **evidence table** beneath where it helps. Statuses never stop the
-render: a not-yet-received input shows a flag, and until the coding file exists
-the coding tables read "data not loaded."
+The first formal review — `01` is investigation-only. Every check either
+**computes** a status from the data or is **evidence-only** (a table to eyeball,
+no badge). Nothing here is hand-maintained prose wearing a status. Checks detect
+what's present and degrade gracefully: a not-yet-loaded input shows "data not
+loaded," never a crash.
 
 Golden rule: **processing flags, it never deletes** — exclusions are columns a
 later metric can honor or ignore.
 
-## 02 — Intake & coding review
+## 02 — Coding & exclusions review
 
 ```{r stage02}
 #| results: 'asis'
 s02 <- tr_stage(
   number = "02",
-  title  = "Intake & Coding Review",
-  question = "Do we have the right data, do we know what each course is, and is the right thing excluded for the right reason?",
+  title  = "Coding & Exclusions Review",
+  question = "Did standardization land, do we know what each course is, and is the right thing excluded?",
   checks = list(
 
-    # ---- intake (data prepped in 01, reviewed here) ----
-    tr_check("2.0", "Snapshot or cumulative enrollment?",
-      good    = "Unambiguous; if cumulative, a snapshot date is agreed with the district.",
-      value   = config$intake$enrollment_type,
-      status  = "todo",
-      records = "Cumulative (enter/exit dates); filtered to Year_End 2026 in 01. Within-year snapshot decision still pending."),
-
-    tr_check("2.1", "Are all critical fields present with ERS D_ names?",
-      good    = "Every critical D_ field present (mapping done in 01).",
-      value   = tr_safe({
-                  crit <- c("D_stu_id","D_employee_id","D_course_id","D_term",
-                            "D_expression","D_location_id","D_location_name")
-                  sum(!crit %in% names(cs_data))
-                }, NA),
-      status  = "ok",
-      records = "Standardized in 01 (see config$column_map). Value = # critical D_ fields still missing."),
-
-    tr_check("2.2", "Term structure — full-year, semesterized, or a mix?",
-      good    = "Every term value has a configured weight; the derived split looks sane.",
-      value   = "provided by the district",
-      status  = "flag",
+    tr_check("2.0", "Did standardization from 01 land — every mapped field present?",
+      good   = "Every field in column_map is present with its D_ name.",
+      value  = tr_safe(length(setdiff(names(config$column_map$course_schedule), names(cs_data))), NA),
+      status = tr_safe(if (length(setdiff(names(config$column_map$course_schedule), names(cs_data))) == 0) "ok" else "flag", "none"),
       evidence = function() {
-        configured <- names(config$weights$term)
-        cs_data |>
-          count(D_term, name = "n_records") |>
-          arrange(D_term) |>
-          mutate(in_config = if_else(D_term %in% configured, "yes", "MISSING from config"))
+        f <- names(config$column_map$course_schedule)
+        data.frame(field = f, present = ifelse(f %in% names(cs_data), "yes", "MISSING"))
       }),
 
-    tr_check("2.3", "Records per student, by school",
-      good = "Per-school record distributions and expression variety look plausible for HS schedules.",
-      value = tr_safe(
-        cs_data |>
-          count(D_stu_id) |>
-          count(n) |>
-          slice_max(nn, n = 1, with_ties = FALSE) |>
-          pull(n),
-        NA
-      ),
-      status = "todo",
-      records = "Percent of students by number of records, plus per-school gut check.",
+    tr_check("2.1", "Term structure — is every term value weightable?",
+      good   = "Every term in the data has a configured weight.",
+      status = tr_safe(if (all(as.character(unique(na.omit(cs_data$D_term))) %in% names(config$weights$term))) "ok" else "flag", "none"),
       evidence = function() {
-        filtered_data <- cs_data |>
-          filter(
-            C_course_time_exclude == "Include",
-            C_class_size_and_teacher_load_exclude == "Include"
-          )
+        cs_data |> count(D_term, name = "n_records") |> arrange(D_term) |>
+          mutate(weight = sapply(as.character(D_term), \(x) {
+            w <- config$weights$term[[x]]
+            if (is.null(w)) "MISSING from config" else as.character(w)
+          }))
+      }),
 
-        records_by_student <- filtered_data |>
-          count(D_location_name, D_stu_id, name = "records_per_student")
-
-        filtered_data |>
-          group_by(D_location_name) |>
-          summarise(
-            n_students = n_distinct(D_stu_id),
-            n_teachers = n_distinct(D_employee_id),
-            terms = paste(sort(unique(na.omit(D_term))), collapse = ", "),
-            n_expressions = n_distinct(D_expression, na.rm = TRUE),
-            .groups = "drop"
-          ) |>
-          left_join(
-            records_by_student |>
-              group_by(D_location_name) |>
-              summarise(
-                avg_records_per_student = mean(records_per_student),
-                .groups = "drop"
-              ),
-            by = "D_location_name"
-          ) |>
+    tr_check("2.2", "Records per student, by school",
+      good = "Per-school record distributions and expression variety look plausible for HS schedules.",
+      evidence = function() {
+        d <- cs_data
+        if (has_cols("C_course_time_exclude", "C_class_size_and_teacher_load_exclude"))
+          d <- d |> filter(C_course_time_exclude == "Include",
+                           C_class_size_and_teacher_load_exclude == "Include")
+        rps <- d |> count(D_location_name, D_stu_id, name = "records_per_student")
+        d |> group_by(D_location_name) |>
+          summarise(n_students = n_distinct(D_stu_id),
+                    n_teachers = n_distinct(D_employee_id),
+                    terms = paste(sort(unique(na.omit(D_term))), collapse = ", "),
+                    n_expressions = n_distinct(D_expression, na.rm = TRUE),
+                    .groups = "drop") |>
+          left_join(rps |> group_by(D_location_name) |>
+                      summarise(avg_records_per_student = round(mean(records_per_student), 1), .groups = "drop"),
+                    by = "D_location_name") |>
           arrange(D_location_name)
-      }
-    ),
+      }),
 
-    tr_check("2.4", "Data inventory — demographics / proficiency / teacher experience",
-      good    = "Each present, or flagged with a district follow-up.",
-      value   = "all not received yet",
-      status  = "missing",
-      records = "Demographics, proficiency, and teacher experience all outstanding -> follow up. Demographics unlocks 2.5 and student grade-level cuts."),
+    tr_check("2.3", "Student demographics — present and populated?",
+      good   = "The demographic fields from the 01 merge exist and are well-filled.",
+      status = tr_safe(if (all(unlist(config$stu_demographics_join$brings_in) %in% names(cs_data))) "ok" else "none", "none"),
+      evidence = function() {
+        f <- unlist(config$stu_demographics_join$brings_in)
+        present <- f %in% names(cs_data)
+        fill <- vapply(f, function(x) if (x %in% names(cs_data)) round(100 * mean(!is.na(cs_data[[x]])), 1) else NA_real_, numeric(1))
+        data.frame(field = f, present = ifelse(present, "yes", "no"), pct_filled = fill)
+      }),
 
-    tr_check("2.5", "Merge demographics & set the student-drop decision",
-      good    = "1 row per student in the demo file; matches understood.",
-      status  = "missing",
-      records = "Waits on demographics. It only removes students, so coding (2.6-2.8) runs now regardless; apply the drop when the file arrives — no re-coding."),
+    tr_check("2.4", "Did the course-coding merge land cleanly?",
+      good   = "Unique key (no row multiplication), row count stable pre/post, and every course matched.",
+      value  = tr_safe(glue("{merge_diag$n_unmatched} unmatched course rows"), NA),
+      status = tr_safe(if (isTRUE(merge_diag$key_unique) && isTRUE(merge_diag$row_stable) && merge_diag$n_unmatched == 0) "ok" else "flag", "none"),
+      evidence = function() {
+        if (is.null(merge_diag)) return(NULL)
+        summ <- data.frame(
+          check  = c("key unique (no multiplication)", "rows stable pre/post", "unmatched course rows"),
+          result = c(ifelse(merge_diag$key_unique, "yes", "NO"),
+                     paste0(format(merge_diag$n_before, big.mark = ","), " -> ",
+                            format(merge_diag$n_after,  big.mark = ",")),
+                     format(merge_diag$n_unmatched, big.mark = ",")))
+        list("Merge summary" = summ,
+             "Course names that didn't get coded" = merge_diag$unmatched_courses)
+      }),
 
-    # ---- coding & exclusions (this stage's own work) ----
-    tr_check("2.6", "Code the courses — is the coding output sane?",
-      good    = glue::glue("Uncoded <= {config$coding$uncoded_flag_threshold_pct}% of records; distributions plausible (not e.g. 40% Non-Departmentalized)."),
-      status  = "todo",
-      records = "Scan the record-weighted distributions for sane categories.",
+    tr_check("2.5", "Coding output — sane distributions, nothing left uncoded?",
+      good   = glue("Uncoded <= {config$coding$uncoded_flag_threshold_pct}% of records; distributions plausible."),
+      value  = tr_safe(paste0(round(100 * mean(cs_data$C_course_subject_area == "UNCODED", na.rm = TRUE), 1), "% uncoded"), NA),
+      status = tr_safe(tr_threshold_status(100 * mean(cs_data$C_course_subject_area == "UNCODED", na.rm = TRUE),
+                                           config$coding$uncoded_flag_threshold_pct, "below"), "none"),
       evidence = function() {
         sa <- cs_data |> count(C_course_subject_area, name = "n_records") |>
-          mutate(pct_records = round(100 * n_records / sum(n_records), 1)) |>
-          arrange(C_course_subject_area)
+          mutate(pct_records = round(100 * n_records / sum(n_records), 1)) |> arrange(C_course_subject_area)
         sub <- cs_data |> count(C_course_subject_area, C_course_subject, name = "n_records") |>
-          mutate(pct_records = round(100 * n_records / sum(n_records), 1)) |>
-          arrange(C_course_subject_area)
-        list("Subject Area — % of records" = sa,
-             "Subject — % of records"      = sub)
+          mutate(pct_records = round(100 * n_records / sum(n_records), 1)) |> arrange(C_course_subject_area)
+        list("Subject Area — % of records" = sa, "Subject — % of records" = sub)
       }),
 
-    tr_check("2.7", "Derive exclusions — right thing dropping, right reason?",
-      good    = "Every excluded course traces to a coding value that justifies it.",
-      status  = "todo",
-      records = "Course-weighted: each excluded course with the coding that caused it.",
+    tr_check("2.6", "Exclusions — right thing dropping, for the right reason?",
+      good = "Every excluded course traces to a coding value that justifies it.",
       evidence = function() {
         cs_data |>
-          distinct(D_course_id, .keep_all = TRUE) |>
-          filter(C_course_time_exclude == "Exclude" |
-                 C_class_size_and_teacher_load_exclude == "Exclude") |>
-          count(C_course_format, C_course_subject,
-                C_course_time_exclude,
-                C_class_size_and_teacher_load_exclude,
-                name = "n_courses", sort = TRUE) |>
-          arrange(C_course_format, C_course_subject, C_course_time_exclude, C_class_size_and_teacher_load_exclude)
+          filter(C_course_time_exclude == "Exclude" | C_class_size_and_teacher_load_exclude == "Exclude") |>
+          count(C_course_subject, D_course_name, C_course_time_exclude,
+                C_class_size_and_teacher_load_exclude, name = "n_courses", sort = TRUE) |>
+          arrange(C_course_subject)
       }),
 
-    tr_check("2.8", "Which expressions carry real instruction?",
-      good    = "Expressions that are entirely Untracked / Un-prepped / Excluded are identified so they fall out.",
-      status  = "todo",
-      records = "Records per expression x subject area — a row concentrated in Untracked/Un-prepped is a non-instructional slot.",
+    tr_check("2.7", "Which expressions carry real instruction?",
+      good = "Expressions that are entirely non-standard formats are identified so they fall out.",
       evidence = function() {
         cs_data |>
           count(D_location_name, D_expression, C_course_format, name = "n_records") |>
-          pivot_wider(names_from = C_course_format,
-                      values_from = n_records, values_fill = 0) |>
+          pivot_wider(names_from = C_course_format, values_from = n_records, values_fill = 0) |>
+          filter(`Standard` == 0) |>
           arrange(D_location_name, D_expression)
       }),
 
-    tr_check("2.9", "TPR weights, class weight, class id, and DB sizing",
-      good    = "Signpost only.",
-      status  = "na",
-      records = "These move to stage 03 (double-bookings), where term/period/rotation weights and the expression parse live.")
+    # ---- double-booking sizing ----
+    tr_check("2.8", "Class ID — what defines a class here?",
+      good  = "The recipe marks a place-in-time without over-splitting real classes.",
+      value = tr_safe(paste(config$class_id$recipe, collapse = " + "), NA),
+      evidence = function() {
+        cols <- config$class_id$recipe[config$class_id$recipe %in% names(cs_data)]
+        cs_data |>
+          filter(!is.na(C_class_id)) |>
+          group_by(across(all_of(c("C_class_id", cols)))) |>
+          summarise(course = dplyr::first(D_course_name),
+                    n_students = n_distinct(D_stu_id), .groups = "drop") |>
+          arrange(desc(n_students)) |> (\(d) slice_sample(d, n = min(8, nrow(d))))()
+      }),
+
+    tr_check("2.9", "Double-booking sizing — how big, and of what kind?",
+      good   = "<2-3% may skip; concentrated in a few schools/classes -> hand-resolve; widespread -> full.",
+      value  = tr_safe(glue("students {pct_of(length(flagged_students), n_stu_time)}% \u00B7 teachers {pct_of(length(flagged_teachers), n_tch_load)}%"), NA),
+      status = tr_safe({
+        r <- c(pct_of(length(flagged_students), n_stu_time), pct_of(length(flagged_teachers), n_tch_load))
+        if (all(is.na(r))) "none" else if (max(r, na.rm = TRUE) < 3) "ok" else "flag"
+      }, "none"),
+      evidence = function() {
+        incl_s <- cs_long |> filter(C_course_time_exclude == "Include")
+        incl_t <- cs_long |> filter(C_class_size_and_teacher_load_exclude == "Include")
+
+        # by-school rates
+        stu <- cs_data |> filter(C_course_time_exclude == "Include") |>
+          group_by(D_location_name) |>
+          summarise(n_students = n_distinct(D_stu_id),
+                    n_db = n_distinct(D_stu_id[D_stu_id %in% flagged_students]), .groups = "drop") |>
+          mutate(pct_db = pct_of(n_db, n_students)) |> arrange(desc(pct_db))
+        tch <- cs_data |> filter(C_class_size_and_teacher_load_exclude == "Include") |>
+          group_by(D_location_name) |>
+          summarise(n_teachers = n_distinct(D_employee_id),
+                    n_db = n_distinct(D_employee_id[D_employee_id %in% flagged_teachers]), .groups = "drop") |>
+          mutate(pct_db = pct_of(n_db, n_teachers)) |> arrange(desc(pct_db))
+
+        # sample colliding rows (flat, collisions adjacent, max 25)
+        stu_grp <- incl_s |> group_by(D_stu_id, M_conflict_key) |>
+          summarise(nc = n_distinct(C_class_id), .groups = "drop") |> filter(nc > 1) |> (\(d) slice_sample(d, n = min(10, nrow(d))))()
+        stu_rows <- incl_s |> semi_join(stu_grp, by = c("D_stu_id", "M_conflict_key")) |>
+          distinct(D_location_name, D_stu_id, M_conflict_key, C_class_id, D_term, D_expression, D_course_section_id, D_course_name) |>
+          arrange(D_location_name, D_stu_id, M_conflict_key) |>
+          transmute(D_location_name, D_stu_id, D_term, D_expression, D_course_section_id, D_course_name, M_conflict_key)
+        # Teacher collisions with the largest combined student rosters
+        tch_collision_rows <- incl_t |>
+          distinct(
+            D_location_name, D_employee_id, M_conflict_key,
+            C_class_id, D_stu_id, D_term, D_expression,
+            D_course_section_id, D_course_name
+          )
+
+        tch_grp <- tch_collision_rows |>
+          group_by(D_location_name, D_employee_id, M_conflict_key) |>
+          summarise(
+            n_classes = n_distinct(C_class_id),
+            n_student_rows = n(),
+            n_unique_students = n_distinct(D_stu_id),
+            .groups = "drop"
+          ) |>
+          filter(n_classes > 1) |>
+          slice_max(n_student_rows, n = 10, with_ties = FALSE)
+
+        tch_rows <- tch_collision_rows |>
+          semi_join(
+            tch_grp,
+            by = c("D_location_name", "D_employee_id", "M_conflict_key")
+          ) |>
+          group_by(D_location_name, D_employee_id, M_conflict_key, C_class_id) |>
+          summarise(
+            D_term             = paste(sort(unique(na.omit(D_term))), collapse = ", "),
+            D_expression       = paste(sort(unique(na.omit(D_expression))), collapse = ", "),
+            D_course_section_id = paste(sort(unique(na.omit(D_course_section_id))), collapse = ", "),
+            D_course_name      = paste(sort(unique(na.omit(D_course_name))), collapse = " | "),
+            n_students_in_class = n_distinct(D_stu_id),
+            .groups = "drop"
+          ) |>
+          left_join(
+            tch_grp |> select(D_location_name, D_employee_id, M_conflict_key, n_student_rows, n_unique_students),
+            by = c("D_location_name", "D_employee_id", "M_conflict_key")
+          ) |>
+          arrange(desc(n_student_rows), D_location_name, D_employee_id, M_conflict_key, desc(n_students_in_class)) |>
+          select(D_location_name, D_employee_id, D_term, D_expression, D_course_section_id, D_course_name,
+                 M_conflict_key, n_students_in_class, n_student_rows, n_unique_students)
+
+        # class-level 100% + the class(es) their students collide with
+        cls <- cs_data |> filter(C_course_time_exclude == "Include") |>
+          distinct(C_class_id, D_course_name, D_location_name, D_stu_id) |>
+          group_by(C_class_id, D_course_name, D_location_name) |>
+          summarise(n_students = n_distinct(D_stu_id),
+                    n_db = n_distinct(D_stu_id[D_stu_id %in% flagged_students]), .groups = "drop") |>
+          mutate(pct_db = pct_of(n_db, n_students)) |>
+          filter(pct_db == 100) |> arrange(desc(n_students)) |> head(20)
+        kc  <- incl_s |> distinct(D_stu_id, M_conflict_key, C_class_id)
+        tgt <- kc |> filter(C_class_id %in% cls$C_class_id) |> distinct(D_stu_id, M_conflict_key)
+        at  <- kc |> semi_join(tgt, by = c("D_stu_id", "M_conflict_key"))
+        look <- cs_data |> distinct(C_class_id, D_course_name)
+        partners <- at |> filter(C_class_id %in% cls$C_class_id) |> rename(focus = C_class_id) |>
+          inner_join(rename(at, partner = C_class_id), by = c("D_stu_id", "M_conflict_key"), relationship = "many-to-many") |>
+          filter(focus != partner) |>
+          left_join(rename(look, partner = C_class_id, partner_course = D_course_name), by = "partner") |>
+          distinct(focus, M_conflict_key, partner, partner_course) |>
+          group_by(focus) |>
+          summarise(collides_with = paste(head(unique(paste0(partner_course, " @", M_conflict_key)), 3), collapse = "; "),
+                    .groups = "drop")
+        cls <- cls |> left_join(rename(partners, C_class_id = focus), by = "C_class_id")
+
+        cls_db <- cs_data |> filter(C_course_time_exclude == "Include") |>
+          group_by(D_location_name) |>
+          summarise(n_classes = n_distinct(C_class_id),
+                    n_db = n_distinct(C_class_id[C_class_id %in% cls$C_class_id]), .groups = "drop") |>
+          mutate(pct_db = pct_of(n_db, n_classes)) |> arrange(desc(pct_db))
+
+        list("Sizing filters applied" = sizing_filter_summary(as.data.frame(cs_data), config$db_sizing_filters),
+             "Student double-bookings by school" = stu,
+             "Student collisions \u2014 sample rows (max 20)" = stu_rows,
+             "Teacher double-bookings by school" = tch,
+             "Teacher collisions \u2014 sample rows (max 20)" = tch_rows,
+             "Class double-bookings by school" = cls_db,
+             "Class-level (100%) double-bookings (max 20)" = cls)
+      })
   )
 )
 
 htmltools::browsable(render_stage(s02))
 ```
 
-## Re-export for the next stage
+*Next -> stage 03: TPR weights, class weight, and double-booking resolution.*
 
-Once coding is joined and the review looks right, write the post-coding file so
-stage 03 reads fresh coding. Flip `eval` to `true` when ready.
+## Re-export for the next stage
 
 ```{r export}
 #| eval: false
@@ -242,26 +392,4 @@ ers_write_sharepoint(
   data = cs_data,
   folder_path = raw_data_folder_path,
   file_name_with_extension = "/2. Processed Data/02_course_data_post_code_and_exclude.csv")
-```
-
-```{r}
-#| eval: false
-late_entry_courses <- cs_data |>
-  filter(!is.na(D_course_id)
-  ) |>
-  group_by(D_location_name, D_course_id) |>
-  summarise(
-    D_course_name = first(D_course_name, default = NA_character_),
-    M_instances = n(),
-    M_entered_on_or_after = sum(
-      !is.na(D_stu_enter_date) &
-        D_stu_enter_date >= as.Date("2026-01-05")
-    ),
-    M_missing_enter_date = sum(is.na(D_stu_enter_date)),
-    M_pct_entered_on_or_after = M_entered_on_or_after / M_instances,
-    .groups = "drop"
-  ) |>
-  filter(M_pct_entered_on_or_after > 0.95) |>
-  arrange(D_location_name, desc(M_pct_entered_on_or_after))
-
 ```
