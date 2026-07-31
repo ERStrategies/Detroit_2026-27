@@ -143,7 +143,7 @@ tr_decision_block <- function(chk, disabled = FALSE) {
 
 .tr_evidence_gt <- function(df) {
   gt(df) |>
-    tab_options(table.font.size = px(12), data_row.padding = px(4),
+    tab_options(table.font.size = px(10), data_row.padding = px(4),
                 column_labels.font.weight = "bold", table.width = pct(100),
                 table.border.top.style = "none") |>
     opt_table_font(font = "system-ui")

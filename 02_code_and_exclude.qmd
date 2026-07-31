@@ -25,12 +25,13 @@ library(Microsoft365R)     # get_sharepoint_site() + drive objects
 library(erstools)          # ers_read_sharepoint()
 source("00_review_helpers.R") # the rendering engine (tr_check / tr_stage / render_stage)
 config <- yaml::read_yaml("00_district_config.yml")
+raw_data_folder_path <- config$raw_data_folder_path
 
 orgfiles_site_url <- "https://erstrategies1.sharepoint.com/sites/orgfiles"
 orgfiles_site  <- get_sharepoint_site(site_url = orgfiles_site_url)
 internal_drive <- orgfiles_site$get_drive("Internal")
 
-raw_data_folder_path <- "District Partners/Detroit Public Schools/26-27 HS Redesign Implementation/1. Data & Analysis - Secure/Fall 2026 Course Schedule Analysis"
+# raw_data_folder_path is set from config above
 
 # Stage 01 output (prepped, D_-named)
 cs_data <- ers_read_sharepoint(
@@ -42,28 +43,25 @@ cs_data <- ers_read_sharepoint(
 cs_course_coding <- tr_safe(
   ers_read_sharepoint(
     folder_path = raw_data_folder_path,
-    file_name_with_extension = "/1. Coding/course_coding_2026.xlsx"),
+    file_name_with_extension = config$raw_files$course_coding),
   otherwise = NULL)
 
 # Join coding on + derive exclusions (only when coding present; on any error
 # cs_data is left as-is, so a half-built coding file never breaks the render).
 if (!is.null(cs_course_coding)) {
   cs_data <- tr_safe({
-    jf <- "D_course_id"
+    jf <- "D_course_name"
     cs_data |>
       select(-any_of(setdiff(names(cs_course_coding), jf))) |>
       left_join(cs_course_coding, by = jf) |>
       mutate(
         C_course_time_exclude = case_when(
-          C_time_metric == FALSE                   ~ "Exclude",
           C_course_subject_area == "Untracked"     ~ "Exclude",
           C_course_time_of_day  != "During school" ~ "Exclude",
           C_course_subject == "Internship"         ~ "Exclude",
           C_course_format  == "Virtual"            ~ "Exclude",
           TRUE                                     ~ "Include"),
         C_class_size_and_teacher_load_exclude = case_when(
-          C_class_size_metric   == FALSE           ~ "Exclude",
-          C_teacher_load_metric == FALSE           ~ "Exclude",
           C_course_subject_area == "Un-prepped"    ~ "Exclude",
           C_course_subject %in% c("Maintenance","Internship",
                                   "Teaching Assistant","Credit Recovery") ~ "Exclude",
@@ -77,7 +75,7 @@ if (!is.null(cs_course_coding)) {
 
 This is the **first formal review** — `01` is investigation-only, so the intake
 decisions get recorded here alongside coding. It reads the prepped file from
-`01` plus the hand-coded `course_coding_2026.xlsx`. Each entry is a **decision**
+`01` plus the hand-coded `cs_course_coding.xlsx`. Each entry is a **decision**
 with an **evidence table** beneath where it helps. Statuses never stop the
 render: a not-yet-received input shows a flag, and until the coding file exists
 the coding tables read "data not loaded."
@@ -88,6 +86,7 @@ later metric can honor or ignore.
 ## 02 — Intake & coding review
 
 ```{r stage02}
+#| results: 'asis'
 s02 <- tr_stage(
   number = "02",
   title  = "Intake & Coding Review",
@@ -113,42 +112,59 @@ s02 <- tr_stage(
 
     tr_check("2.2", "Term structure — full-year, semesterized, or a mix?",
       good    = "Every term value has a configured weight; the derived split looks sane.",
-      value   = "derived in 01 (FY / S1 / S2)",
+      value   = "provided by the district",
       status  = "flag",
-      records = "Term is DERIVED — the value counts ARE the check: a sane FY/S1/S2 split (not ~100% FY) means the derivation held.",
       evidence = function() {
         configured <- names(config$weights$term)
         cs_data |>
           count(D_term, name = "n_records") |>
-          arrange(D_location_name) |>
+          arrange(D_term) |>
           mutate(in_config = if_else(D_term %in% configured, "yes", "MISSING from config"))
       }),
 
-    tr_check("2.3", "Records per student, by school?",
-      good    = "Per-school counts and expression variety look plausible for HS schedules.",
-      value   = tr_safe(
-                  cs_data |> count(D_stu_id) |> count(n) |>
-                    slice_max(nn, n = 1, with_ties = FALSE) |> pull(n), NA),
-      status  = "todo",
-      records = "Modal records/student + per-school gut check.",
-      evidence = function() {
-        modal <- cs_data |>
-          count(D_location_name, D_stu_id, name = "recs") |>
-          count(D_location_name, recs, name = "n") |>
-          group_by(D_location_name) |>
-          slice_max(n, n = 1, with_ties = FALSE) |>
-          transmute(D_location_name, modal_records = recs)
+    tr_check("2.3", "Records per student, by school",
+      good = "Per-school record distributions and expression variety look plausible for HS schedules.",
+      value = tr_safe(
         cs_data |>
+          count(D_stu_id) |>
+          count(n) |>
+          slice_max(nn, n = 1, with_ties = FALSE) |>
+          pull(n),
+        NA
+      ),
+      status = "todo",
+      records = "Percent of students by number of records, plus per-school gut check.",
+      evidence = function() {
+        filtered_data <- cs_data |>
+          filter(
+            C_course_time_exclude == "Include",
+            C_class_size_and_teacher_load_exclude == "Include"
+          )
+
+        records_by_student <- filtered_data |>
+          count(D_location_name, D_stu_id, name = "records_per_student")
+
+        filtered_data |>
           group_by(D_location_name) |>
           summarise(
-            n_students    = n_distinct(D_stu_id),
-            n_teachers    = n_distinct(D_employee_id),
-            terms         = paste(sort(unique(D_term)), collapse = ", "),
-            n_expressions = n_distinct(D_expression),
-            .groups = "drop") |>
-          left_join(modal, by = "D_location_name") |>
+            n_students = n_distinct(D_stu_id),
+            n_teachers = n_distinct(D_employee_id),
+            terms = paste(sort(unique(na.omit(D_term))), collapse = ", "),
+            n_expressions = n_distinct(D_expression, na.rm = TRUE),
+            .groups = "drop"
+          ) |>
+          left_join(
+            records_by_student |>
+              group_by(D_location_name) |>
+              summarise(
+                avg_records_per_student = mean(records_per_student),
+                .groups = "drop"
+              ),
+            by = "D_location_name"
+          ) |>
           arrange(D_location_name)
-      }),
+      }
+    ),
 
     tr_check("2.4", "Data inventory — demographics / proficiency / teacher experience",
       good    = "Each present, or flagged with a district follow-up.",
@@ -211,7 +227,7 @@ s02 <- tr_stage(
   )
 )
 
-render_stage(s02)
+htmltools::browsable(render_stage(s02))
 ```
 
 ## Re-export for the next stage
@@ -228,7 +244,7 @@ ers_write_sharepoint(
 ```
 
 ```{r}
-
+#| eval: false
 late_entry_courses <- cs_data |>
   filter(!is.na(D_course_id)
   ) |>

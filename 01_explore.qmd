@@ -1,6 +1,6 @@
 ---
-title: "Course Schedule Processing — Tier 1 · Explore"
-subtitle: "Detroit Public Schools · config-free data profiling"
+title: "Course Schedule Processing — Step 1: Explore"
+subtitle: "Config-free data profiling"
 date: today
 format:
   html:
@@ -45,6 +45,8 @@ library(htmltools)
 library(Microsoft365R)            # required: get_sharepoint_site() + drive objects
 library(erstools)                 # ers_read_sharepoint()
 source("00_explore_helpers.R")
+config <- yaml::read_yaml("00_district_config.yml")
+raw_data_folder_path <- config$raw_data_folder_path
 
 # NO config, NO column_map, NO D_ names. Reads the files exactly as received.
 
@@ -52,17 +54,33 @@ orgfiles_site_url <- "https://erstrategies1.sharepoint.com/sites/orgfiles"
 orgfiles_site  <- get_sharepoint_site(site_url = orgfiles_site_url)
 internal_drive <- orgfiles_site$get_drive("Internal")
 
-raw_data_folder_path <- "District Partners/Detroit Public Schools/26-27 HS Redesign Implementation/1. Data & Analysis - Secure/Fall 2026 Course Schedule Analysis"
+# SPRINGFIELD -----
+# raw_data_folder_path is set from config above
 
-# Course schedule — one row per student per course
+# Load course schedule data
 cs_raw <- ers_read_sharepoint(
   folder_path = raw_data_folder_path,
-  file_name_with_extension = "/0. Raw Data/course_sections_251103.csv")
+  file_name_with_extension = config$raw_files$cs_raw)
+
+# Load student demographic data
+stu_demographics <- tr_safe(
+  ers_read_sharepoint(
+    folder_path = raw_data_folder_path,
+    file_name_with_extension = config$raw_files$stu_demographics),
+  otherwise = NULL)
+
+# DETROIT -----
+#raw_data_folder_path <- "District Partners/Detroit Public Schools/26-27 HS Redesign Implementation/1. Data & Analysis - Secure/Fall 2026 Course Schedule Analysis"
+
+# Course schedule — one row per student per course
+# cs_raw <- ers_read_sharepoint(
+#   folder_path = raw_data_folder_path,
+#   file_name_with_extension = "/0. Raw Data/course_sections_251103.csv")
 
 # Location coding — the CS file has school IDs but not school names; join source.
-location_coded <- ers_read_sharepoint(
-  folder_path = raw_data_folder_path,
-  file_name_with_extension = "/1. Coding/location_coded.xlsx")
+# location_coded <- ers_read_sharepoint(
+#   folder_path = raw_data_folder_path,
+#   file_name_with_extension = "/1. Coding/location_coded.xlsx")
 
 # Student demographics: NOT received yet — profile it here when it arrives.
 ```
@@ -93,7 +111,7 @@ course number.
 
 ```{r cs-peek}
 # EDIT to your headers:
-peek_cols <- c("Term", "Rotation", "Period", "Expression", "Course Number", "Period Expression")
+peek_cols <- c("Term", "Rotation", "Period", "Expression", "Period Expression")
 
 peek <- peek_cols[peek_cols %in% names(cs_raw)]
 if (length(peek) == 0) {
@@ -103,13 +121,13 @@ if (length(peek) == 0) {
 }
 ```
 
-## Location coding — column profile (raw)
+## Student demographics coding — column profile (raw)
 
-The join source for school names (and likely level/type). Find the column here
-that matches the school-id column in the CS profile — that's your join key.
+The join source for student demographic flags (SWD, ELL, FRL). Find the column here
+that matches the student ID column in the CS profile — that's your join key.
 
-```{r loc-profile}
-explore_gt(explore_profile(location_coded), "Raw location coding — every column")
+```{r dem-profile}
+explore_gt(explore_profile(stu_demographics), "Raw student demographics — every column")
 ```
 
 ## Prep edits (staging)
@@ -119,85 +137,125 @@ below eventually **promotes** to a durable home — this block is where you get 
 right first. Fill in the `<...>` placeholders from the profiles above, then set
 this chunk's `eval` to `true`.
 
-```{r prep}
+```{r prep 1}
 #| eval: true
-snapshot_s1 <- as.Date("2025-10-30")
-snapshot_s2 <- as.Date("2026-02-15")
+# Config-driven prep — reads column_map, stu_demographics_join, and scope from
+# the district config. No edits needed here for a new district;
+# update 00_district_config_*.yml instead.
+config <- yaml::read_yaml("00_district_config_spr.yml")
 
+# (1) RENAME: map raw district headers -> ERS D_ names
 cs_prepped <- cs_raw |>
-  # (1) RENAME — map district headers to pipeline names.
-  rename(
-    D_stu_id            = MaskedStudentID,
-    D_employee_id       = MaskedTeacherID,
-    D_location_id       = EEM_CODE,
-    D_expression        = `Period Expression`,
-    D_course_name       = `Course Name`,
-    D_course_id         = `Course Number`,
-    D_sced_subject_code = `SCED Code`,
-    D_year_id           = Year_End,
-    D_stu_enter_date    = `Date Enrolled`,
-    D_stu_exit_date     = `Date Left`
-  ) |>
+  rename(any_of(unlist(config$column_map$course_schedule)))
 
-  # (2) JOIN — bring school names in from location_coded.
-  filter(!is.na(D_location_id), D_location_id != "NULL") |>
-  mutate(D_location_id = as.integer(D_location_id)) |>
-  left_join(
-    location_coded |>
-      mutate(D_location_id = as.integer(D_location_id)),
-    by = "D_location_id"
-  ) |>
+# (2) DEMOGRAPHICS JOIN: rename and merge onto cs_prepped (if data available)
+if (!is.null(config$stu_demographics_join) &&
+    config$data_inventory$demographics == "received" &&
+    exists("stu_demographics")) {
+  dem_cfg <- config$stu_demographics_join
+  dem_file <- stu_demographics |>
+    rename(any_of(unlist(config$column_map$demographics))) |>
+    select(all_of(c(dem_cfg$key, dem_cfg$brings_in)))
+  # Apply recodes if specified in config
+  if (!is.null(dem_cfg$recode)) {
+    for (col in names(dem_cfg$recode)) {
+      mapping <- dem_cfg$recode[[col]]
+      dem_file <- dem_file |>
+        mutate(!!col := unlist(mapping)[as.character(.data[[col]])])
+    }
+  }
+  cs_prepped <- cs_prepped |>
+    left_join(dem_file, by = dem_cfg$key)
+}
 
-  # (3) FILTER — based on what you find in the initial explore
-  filter(C_location_type == "Neighborhood School") |>
-  filter(D_expression != "NULL") |>
-  filter(D_year_id == 2026) |>
+# (3) SCOPE: drop rows where key columns are null/NA (post-join, post-rename)
+null_cols <- config$scope$drop_when_null
+cs_prepped <- cs_prepped |>
+  filter(if_all(all_of(null_cols), ~ !is.na(.) & . != "NULL"))
+```
 
-  # (4) DERIVE — term from course number/name.
-  mutate(
-    # Create term from course-number suffix
-    D_course_id_suffix = str_extract(
-    str_to_upper(str_trim(D_course_id)),
-    "S[12]$"
-    ),
-    D_term = case_when(
-      # First priority: course-name ending
-      str_detect(
-        str_to_upper(D_course_name),
-        "-\\s*A\\s*\\*?\\s*$"
-      ) ~ "S1",
-      str_detect(
-        str_to_upper(D_course_name),
-        "-\\s*B\\s*\\*?\\s*$"
-      ) ~ "S2",
-      # Second priority: course-ID ending
-      D_course_id_suffix == "S1" ~ "S1",
-      D_course_id_suffix == "S2" ~ "S2",
-      # Otherwise, full year
-      TRUE ~ "FY"
-    ),
-    # Student must be enrolled across the applicable term window
-    C_stu_snapshot = case_when(
-      D_term == "S1" &
-        D_stu_enter_date <= snapshot_s1 &
-        (is.na(D_stu_exit_date) | D_stu_exit_date >= snapshot_s1) ~ "Include",
+```{r prep 2}
+#| eval: true
 
-      D_term == "S2" &
-        D_stu_enter_date <= snapshot_s2 &
-        (is.na(D_stu_exit_date) | D_stu_exit_date >= snapshot_s2) ~ "Include",
+# DETROIT PREP ----
 
-      D_term == "FY" & (
-        D_stu_enter_date <= snapshot_s1 &
-          (is.na(D_stu_exit_date) | D_stu_exit_date >= snapshot_s1) |
-        D_stu_enter_date <= snapshot_s2 &
-          (is.na(D_stu_exit_date) | D_stu_exit_date >= snapshot_s2)
-      ) ~ "Include",
+# snapshot_s1 <- as.Date("2025-10-30")
+# snapshot_s2 <- as.Date("2026-02-15")
 
-      TRUE ~ "Exclude"
-    )
-  ) |>
-  # (5) SELECT - columns that start with eith "D_" or "C_"
-  select(starts_with("D_"), starts_with("C_"))
+# cs_prepped <- cs_raw |>
+#   # (1) RENAME — map district headers to pipeline names.
+#   rename(
+#     D_stu_id            = MaskedStudentID,
+#     D_employee_id       = MaskedTeacherID,
+#     D_location_id       = EEM_CODE,
+#     D_expression        = `Period Expression`,
+#     D_course_name       = `Course Name`,
+#     D_course_id         = `Course Number`,
+#     D_sced_subject_code = `SCED Code`,
+#     D_year_id           = Year_End,
+#     D_stu_enter_date    = `Date Enrolled`,
+#     D_stu_exit_date     = `Date Left`
+#   ) |>
+
+#   # (2) JOIN — bring school names in from location_coded.
+#   filter(!is.na(D_location_id), D_location_id != "NULL") |>
+#   mutate(D_location_id = as.integer(D_location_id)) |>
+#   left_join(
+#     location_coded |>
+#       mutate(D_location_id = as.integer(D_location_id)),
+#     by = "D_location_id"
+#   ) |>
+
+#   # (3) FILTER — based on what you find in the initial explore
+#   filter(C_location_type == "Neighborhood School") |>
+#   filter(D_expression != "NULL") |>
+#   filter(D_year_id == 2026) |>
+
+#   # (4) DERIVE — term from course number/name.
+#   mutate(
+#     # Create term from course-number suffix
+#     D_course_id_suffix = str_extract(
+#     str_to_upper(str_trim(D_course_id)),
+#     "S[12]$"
+#     ),
+#     D_term = case_when(
+#       # First priority: course-name ending
+#       str_detect(
+#         str_to_upper(D_course_name),
+#         "-\\s*A\\s*\\*?\\s*$"
+#       ) ~ "S1",
+#       str_detect(
+#         str_to_upper(D_course_name),
+#         "-\\s*B\\s*\\*?\\s*$"
+#       ) ~ "S2",
+#       # Second priority: course-ID ending
+#       D_course_id_suffix == "S1" ~ "S1",
+#       D_course_id_suffix == "S2" ~ "S2",
+#       # Otherwise, full year
+#       TRUE ~ "FY"
+#     ),
+#     # Student must be enrolled across the applicable term window
+#     C_stu_snapshot = case_when(
+#       D_term == "S1" &
+#         D_stu_enter_date <= snapshot_s1 &
+#         (is.na(D_stu_exit_date) | D_stu_exit_date >= snapshot_s1) ~ "Include",
+
+#       D_term == "S2" &
+#         D_stu_enter_date <= snapshot_s2 &
+#         (is.na(D_stu_exit_date) | D_stu_exit_date >= snapshot_s2) ~ "Include",
+
+#       D_term == "FY" & (
+#         D_stu_enter_date <= snapshot_s1 &
+#           (is.na(D_stu_exit_date) | D_stu_exit_date >= snapshot_s1) |
+#         D_stu_enter_date <= snapshot_s2 &
+#           (is.na(D_stu_exit_date) | D_stu_exit_date >= snapshot_s2)
+#       ) ~ "Include",
+
+#       TRUE ~ "Exclude"
+#     )
+#   ) |>
+#   # (5) SELECT - columns that start with eith "D_" or "C_"
+#   select(starts_with("D_"), starts_with("C_"))
 ```
 
 ## Reinvestigate — profile after edits
@@ -218,11 +276,15 @@ if (exists("cs_prepped")) {
 # EDIT to your headers:
 peek_cols <- c("D_term", "D_rotation", "D_period", "D_expression", "D_stu_enter_date", "D_stu_exit_date")
 
-peek <- peek_cols[peek_cols %in% names(cs_prepped)]
-if (length(peek) == 0) {
-  htmltools::HTML("<em>None of the named columns are present — adjust peek_cols to match the profile above.</em>")
+if (!exists("cs_prepped")) {
+  htmltools::HTML("<em>cs_prepped not found — run the data prep steps above first.</em>")
 } else {
-  explore_render(setNames(lapply(peek, function(c) explore_value_counts(cs_prepped, c, top = 40)), peek))
+  peek <- peek_cols[peek_cols %in% names(cs_prepped)]
+  if (length(peek) == 0) {
+    htmltools::HTML("<em>None of the named columns are present — adjust peek_cols to match the profile above.</em>")
+  } else {
+    explore_render(setNames(lapply(peek, function(c) explore_value_counts(cs_prepped, c, top = 40)), peek))
+  }
 }
 ```
 
