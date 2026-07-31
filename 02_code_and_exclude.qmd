@@ -185,10 +185,10 @@ s02 <- tr_stage(
       evidence = function() {
         sa <- cs_data |> count(C_course_subject_area, name = "n_records") |>
           mutate(pct_records = round(100 * n_records / sum(n_records), 1)) |>
-          arrange(desc(n_records))
+          arrange(C_course_subject_area)
         sub <- cs_data |> count(C_course_subject_area, C_course_subject, name = "n_records") |>
           mutate(pct_records = round(100 * n_records / sum(n_records), 1)) |>
-          arrange(desc(n_records))
+          arrange(C_course_subject_area)
         list("Subject Area — % of records" = sa,
              "Subject — % of records"      = sub)
       }),
@@ -205,7 +205,8 @@ s02 <- tr_stage(
           count(C_course_format, C_course_subject,
                 C_course_time_exclude,
                 C_class_size_and_teacher_load_exclude,
-                name = "n_courses", sort = TRUE)
+                name = "n_courses", sort = TRUE) |>
+          arrange(C_course_format, C_course_subject, C_course_time_exclude, C_class_size_and_teacher_load_exclude)
       }),
 
     tr_check("2.8", "Which expressions carry real instruction?",
@@ -214,10 +215,10 @@ s02 <- tr_stage(
       records = "Records per expression x subject area — a row concentrated in Untracked/Un-prepped is a non-instructional slot.",
       evidence = function() {
         cs_data |>
-          count(D_expression, C_course_format, name = "n_records") |>
+          count(D_location_name, D_expression, C_course_format, name = "n_records") |>
           pivot_wider(names_from = C_course_format,
                       values_from = n_records, values_fill = 0) |>
-          arrange(D_expression)
+          arrange(D_location_name, D_expression)
       }),
 
     tr_check("2.9", "TPR weights, class weight, class id, and DB sizing",
